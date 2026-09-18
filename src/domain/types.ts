@@ -36,9 +36,18 @@ export interface MemoryRecord {
   updatedAt: string;
 }
 
+export interface LLMToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
 export interface LLMMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  content: string | null;
+  tool_calls?: LLMToolCall[];
+  tool_call_id?: string;
+  name?: string;
 }
 
 export interface LLMResponse {
@@ -46,10 +55,14 @@ export interface LLMResponse {
   provider: string;
   model?: string;
   usage?: { inputTokens?: number; outputTokens?: number };
+  toolCalls?: LLMToolCall[];
 }
 
 export interface LLMProvider {
-  chat(messages: LLMMessage[], options?: { temperature?: number }): Promise<LLMResponse>;
+  chat(
+    messages: LLMMessage[],
+    options?: { temperature?: number; tools?: unknown[]; toolChoice?: "auto" | "none" }
+  ): Promise<LLMResponse>;
 }
 
 export interface ExecutionResult {
