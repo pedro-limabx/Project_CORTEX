@@ -24,7 +24,7 @@ app.get("/health", async () => ({
   ok: true,
   service: "cortex",
   intelligence: "neuron",
-  version: "0.1.0",
+  version: "0.2.0",
   timestamp: new Date().toISOString()
 }));
 
@@ -37,13 +37,31 @@ app.get("/api/tools", async () => registry.list().map(t => ({
 })));
 
 app.post("/api/chat", async (request, reply) => {
-  const body = request.body as { message?: unknown; userId?: unknown };
+  const body = request.body as {
+    message?: unknown;
+    userId?: unknown;
+    grantedPermissions?: unknown;
+    approvedToolCalls?: unknown;
+    dryRun?: unknown;
+  };
+
   if (typeof body.message !== "string" || body.message.trim().length === 0) {
     return reply.code(400).send({ error: "message is required" });
   }
 
+  const permissions = Array.isArray(body.grantedPermissions)
+    ? body.grantedPermissions.filter((p): p is string => typeof p === "string")
+    : [];
+  const approvals = Array.isArray(body.approvedToolCalls)
+    ? body.approvedToolCalls.filter((p): p is string => typeof p === "string")
+    : [];
+
   const userId = typeof body.userId === "string" && body.userId.trim() ? body.userId : "local-user";
-  return neuron.respond(userId, body.message.trim());
+  return neuron.respond(userId, body.message.trim(), {
+    grantedPermissions: permissions as any,
+    approvedToolCalls: approvals,
+    dryRun: body.dryRun === true
+  });
 });
 
 const shutdown = async () => {
