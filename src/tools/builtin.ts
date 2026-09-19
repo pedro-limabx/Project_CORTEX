@@ -3,7 +3,7 @@ import type { ToolDefinition } from "../domain/types.js";
 
 export const calculatorTool: ToolDefinition<{ expression: string }, { result: number }> = {
   name: "calculator.evaluate",
-  version: "1.1.0",
+  version: "1.1.1",
   description: "Evaluate a basic arithmetic expression.",
   risk: "LOW",
   permissions: [],
@@ -24,6 +24,7 @@ export const calculatorTool: ToolDefinition<{ expression: string }, { result: nu
       const b = values.pop();
       const a = values.pop();
       if (a === undefined || b === undefined) throw new Error("Invalid expression");
+
       let value: number;
       if (op === "+") value = a + b;
       else if (op === "-") value = a - b;
@@ -31,46 +32,77 @@ export const calculatorTool: ToolDefinition<{ expression: string }, { result: nu
       else if (op === "/") {
         if (b === 0) throw new Error("Division by zero");
         value = a / b;
-      } else value = a % b;
+      } else if (op === "%") {
+        if (b === 0) throw new Error("Division by zero");
+        value = a % b;
+      } else {
+        throw new Error("Invalid operator");
+      }
+
       if (!Number.isFinite(value)) throw new Error("Invalid calculation result");
       values.push(value);
     };
 
     let expectValue = true;
+
     for (const token of tokens) {
       if (/^\d/.test(token)) {
         if (!expectValue) throw new Error("Invalid expression");
         values.push(Number(token));
         expectValue = false;
-      } else if (token === "(") {
+        continue;
+      }
+
+      if (token === "(") {
         if (!expectValue) throw new Error("Invalid expression");
         operators.push(token);
-      } else if (token === ")") {
-        if (expectValue) throw new Error("Invalid expression");
-        while (operators.length && operators.at(-1) !== "(") apply();
-        if (operators.pop() !== "(") throw new Error("Invalid expression");
-      } else {
-        if (expectValue) {
-          if (token !== "-") throw new Error("Invalid expression");
-          values.push(0);
-        }
-        while (
-          operators.length &&
-          operators.at(-1) !== "(" &&
-          precedence[operators.at(-1)] >= precedence[token]
-        ) apply();
-        operators.push(token);
-        expectValue = true;
+        continue;
       }
+
+      if (token === ")") {
+        if (expectValue) throw new Error("Invalid expression");
+        while (operators.length > 0 && operators[operators.length - 1] !== "(") {
+          apply();
+        }
+        if (operators.pop() !== "(") throw new Error("Invalid expression");
+        expectValue = false;
+        continue;
+      }
+
+      if (expectValue) {
+        if (token !== "-") throw new Error("Invalid expression");
+        values.push(0);
+      }
+
+      const topOperator = operators[operators.length - 1];
+      const topPrecedence = topOperator === undefined ? -1 : precedence[topOperator];
+      const tokenPrecedence = precedence[token];
+
+      if (tokenPrecedence === undefined) throw new Error("Invalid operator");
+
+      while (
+        operators.length > 0 &&
+        topOperator !== "(" &&
+        topPrecedence >= tokenPrecedence
+      ) {
+        apply();
+      }
+
+      operators.push(token);
+      expectValue = true;
     }
 
     if (expectValue) throw new Error("Invalid expression");
-    while (operators.length) {
-      if (operators.at(-1) === "(") throw new Error("Invalid expression");
+
+    while (operators.length > 0) {
+      if (operators[operators.length - 1] === "(") throw new Error("Invalid expression");
       apply();
     }
-    if (values.length !== 1) throw new Error("Invalid expression");
-    return { result: values[0] };
+
+    const result = values[0];
+    if (result === undefined || values.length !== 1) throw new Error("Invalid expression");
+
+    return { result };
   }
 };
 
