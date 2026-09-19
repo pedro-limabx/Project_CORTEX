@@ -79,7 +79,7 @@ export const calculatorTool: ToolDefinition<{ expression: string }, { result: nu
 
       while (operators.length > 0) {
         const topOperator = operators[operators.length - 1];
-        if (topOperator === "(") break;
+        if (topOperator === undefined || topOperator === "(") break;
 
         const topPrecedence = precedence[topOperator];
         if (topPrecedence === undefined) throw new Error("Invalid operator");
