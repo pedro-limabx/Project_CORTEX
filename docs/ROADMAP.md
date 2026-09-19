@@ -2,7 +2,7 @@
 
 1. Foundation + Core — initial implementation.
 2. Persistent memory + audit.
-3. Structured tool calling + planner.
+3. Structured tool calling + planner — deterministic multi-step replanning implemented; general planner remains next.
 4. Authentication + persistent permissions.
 5. Browser/computer gateway.
 6. Voice.
