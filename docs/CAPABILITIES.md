@@ -7,7 +7,7 @@
 | Runtime permission policy | 🟢 | Runtime | HIGH |
 | In-process memory | 🟢 | Runtime | MEDIUM |
 | Persistent memory | 🟡 | PostgreSQL + retrieval | MEDIUM |
-| Multi-step planner | 🟡 | Agent engine | HIGH |
+| Multi-step planner | 🟡 | Agent engine; deterministic replanning currently implemented in local test provider | HIGH |
 | Browser/computer control | 🟡 | Controlled gateway | HIGH |
 | Telephony | 🟠 | VoIP/SIP/OS/third parties | CRITICAL |
 | Financial operations | 🟠 | Official APIs/Open Finance | CRITICAL |
