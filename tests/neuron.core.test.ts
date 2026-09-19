@@ -12,7 +12,7 @@ describe("NEURON chained tool flow", () => {
     registry.register(calculatorTool);
     registry.register(timeTool);
 
-    const isoPattern = new RegExp("^\\\\d{4}-\\\\d{2}-\\\\d{2}T\\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d{3}Z$");
+    const isoPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
     let calls = 0;
 
     const provider: LLMProvider = {
