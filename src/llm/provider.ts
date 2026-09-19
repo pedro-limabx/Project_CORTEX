@@ -85,7 +85,7 @@ function extractArithmeticExpression(text: string): string | undefined {
     return `${multiplication[1].replace(",", ".")}*${multiplication[2].replace(",", ".")}`;
   }
 
-  const arithmetic = text.match(/(-?\\d+(?:[.,]\\d+)?)\\s*([+\\-*/%])\\s*(-?\\d+(?:[.,]\\d+)?)/);
+  const arithmetic = text.match(/(-?\\d+(?:[.,]\\d+)?)\\s*([-+*/%])\\s*(-?\\d+(?:[.,]\\d+)?)/);
   if (arithmetic) {
     return `${arithmetic[1].replace(",", ".")}${arithmetic[2]}${arithmetic[3].replace(",", ".")}`;
   }
