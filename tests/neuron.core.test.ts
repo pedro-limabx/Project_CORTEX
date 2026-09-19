@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryStore } from "../src/memory/store.js";
 import type { LLMMessage, LLMProvider, LLMResponse } from "../src/domain/types.js";
+import { LocalTestProvider } from "../src/llm/provider.js";
 import { NeuronCore } from "../src/neuron/core.js";
 import { ToolExecutor } from "../src/tools/executor.js";
 import { ToolRegistry } from "../src/tools/registry.js";
@@ -99,5 +100,45 @@ describe("NEURON chained tool flow", () => {
     expect(result.text).toContain("450");
     expect(result.text).toContain(timeResult.output?.iso ?? "");
     expect(calls).toBe(3);
+  });
+});
+
+
+describe("NEURON local replanning", () => {
+  it("replans after calculator output and then executes system.time", async () => {
+    const registry = new ToolRegistry();
+    registry.register(calculatorTool);
+    registry.register(timeTool);
+
+    const core = new NeuronCore(
+      new LocalTestProvider(),
+      new InMemoryStore(),
+      registry,
+      new ToolExecutor(registry)
+    );
+
+    const result = await core.respond(
+      "test-user",
+      "NEURON, calcule 25 vezes 18 e depois me diga que horas são."
+    );
+
+    expect(result.steps).toBe(3);
+    expect(result.toolResults).toHaveLength(2);
+    expect(result.toolResults[0]).toMatchObject({
+      tool: "calculator.evaluate",
+      ok: true,
+      output: { result: 450 }
+    });
+    expect(result.toolResults[1]).toMatchObject({
+      tool: "system.time",
+      ok: true
+    });
+
+    const timeResult = result.toolResults[1] as { output?: { iso?: string } };
+    expect(timeResult.output?.iso).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+    );
+    expect(result.text).toContain("450");
+    expect(result.text).toContain(timeResult.output?.iso ?? "");
   });
 });
