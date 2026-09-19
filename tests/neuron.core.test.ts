@@ -12,7 +12,7 @@ describe("NEURON chained tool flow", () => {
     registry.register(calculatorTool);
     registry.register(timeTool);
 
-    const iso = "2026-09-19T03:21:15.395Z";
+    const isoPattern = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/;
     let calls = 0;
 
     const provider: LLMProvider = {
@@ -56,16 +56,14 @@ describe("NEURON chained tool flow", () => {
         }
 
         const payload = JSON.parse(lastTool?.content ?? "{}");
-        expect(payload).toMatchObject({
-          tool: "system.time",
-          ok: true,
-          output: { iso }
-        });
+        expect(payload.tool).toBe("system.time");
+        expect(payload.ok).toBe(true);
+        expect(payload.output?.iso).toMatch(isoPattern);
 
         return {
           provider: "test",
           model: "deterministic-chain",
-          text: "25 vezes 18 = 450. Horário: " + iso
+          text: "25 vezes 18 = 450. Horário: " + payload.output.iso
         };
       }
     };
@@ -93,12 +91,13 @@ describe("NEURON chained tool flow", () => {
 
     expect(result.toolResults[1]).toMatchObject({
       tool: "system.time",
-      ok: true,
-      output: { iso }
+      ok: true
     });
+    const timeResult = result.toolResults[1] as { output?: { iso?: string } };
+    expect(timeResult.output?.iso).toMatch(isoPattern);
 
     expect(result.text).toContain("450");
-    expect(result.text).toContain(iso);
+    expect(result.text).toContain(timeResult.output?.iso ?? "");
     expect(calls).toBe(3);
   });
 });
