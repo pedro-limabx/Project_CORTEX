@@ -3,6 +3,8 @@ import type { LLMMessage, LLMProvider, LLMResponse, LLMToolCall } from "../domai
 export class LocalTestProvider implements LLMProvider {
   async chat(messages: LLMMessage[]): Promise<LLMResponse> {
     const last = messages[messages.length - 1];
+    const userMessage = messages.find(m => m.role === "user")?.content ?? "";
+    const normalized = userMessage.toLowerCase();
 
     if (last?.role === "tool") {
       let payload: any;
@@ -10,6 +12,53 @@ export class LocalTestProvider implements LLMProvider {
         payload = JSON.parse(last.content ?? "{}");
       } catch {
         payload = {};
+      }
+
+      if (payload?.tool === "calculator.evaluate") {
+        if (!payload.ok) {
+          return {
+            provider: "local-test",
+            model: "cortex-deterministic-test",
+            text: `Não consegui executar a ferramenta: ${payload.error ?? "erro desconhecido"}`
+          };
+        }
+
+        if (/(hora|horário|horas)/i.test(normalized)) {
+          return {
+            provider: "local-test",
+            model: "cortex-deterministic-test",
+            text: "",
+            toolCalls: [{
+              id: cryptoRandomId(),
+              name: "system.time",
+              arguments: "{}"
+            }]
+          };
+        }
+
+        return {
+          provider: "local-test",
+          model: "cortex-deterministic-test",
+          text: `O resultado é ${payload.output?.result}.`
+        };
+      }
+
+      if (payload?.tool === "system.time") {
+        if (payload.ok && payload.output?.iso) {
+          return {
+            provider: "local-test",
+            model: "cortex-deterministic-test",
+            text: `O resultado é ${this.extractCalculatorResult(messages)}. O horário atual do servidor é ${payload.output.iso}.`
+          };
+        }
+
+        return {
+          provider: "local-test",
+          model: "cortex-deterministic-test",
+          text: payload?.error
+            ? `Não consegui executar a ferramenta: ${payload.error}`
+            : "A ferramenta foi processada."
+        };
       }
 
       if (payload?.ok && payload?.output?.result !== undefined) {
@@ -37,8 +86,20 @@ export class LocalTestProvider implements LLMProvider {
       };
     }
 
-    const userMessage = messages.find(m => m.role === "user")?.content ?? "";
-    const normalized = userMessage.toLowerCase();
+    const expression = extractArithmeticExpression(normalized);
+
+    if (expression) {
+      return {
+        provider: "local-test",
+        model: "cortex-deterministic-test",
+        text: "",
+        toolCalls: [{
+          id: cryptoRandomId(),
+          name: "calculator.evaluate",
+          arguments: JSON.stringify({ expression })
+        }]
+      };
+    }
 
     if (/(hora|horário|horas)/i.test(normalized)) {
       return {
@@ -53,44 +114,29 @@ export class LocalTestProvider implements LLMProvider {
       };
     }
 
-    const expression = extractArithmeticExpression(normalized);
-    if (expression) {
-      return {
-        provider: "local-test",
-        model: "cortex-deterministic-test",
-        text: "",
-        toolCalls: [{
-          id: cryptoRandomId(),
-          name: "calculator.evaluate",
-          arguments: JSON.stringify({ expression })
-        }]
-      };
-    }
-
     return {
       provider: "local-test",
       model: "cortex-deterministic-test",
       text: "Estou em modo de teste local. Posso demonstrar o ciclo de ferramentas com cálculo e horário."
     };
   }
-}
 
-function cryptoRandomId(): string {
-  return `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
+  private extractCalculatorResult(messages: LLMMessage[]): string {
+    for (const message of messages) {
+      if (message.role !== "tool" || !message.content) continue;
 
-function extractArithmeticExpression(text: string): string | undefined {
-  const multiplication = text.match(/(-?\d+(?:[.,]\d+)?)\s*(?:vezes|x|multiplicado por)\s*(-?\d+(?:[.,]\d+)?)/i);
-  if (multiplication) {
-    return `${multiplication[1].replace(",", ".")}*${multiplication[2].replace(",", ".")}`;
+      try {
+        const payload = JSON.parse(message.content);
+        if (payload?.tool === "calculator.evaluate" && payload?.ok && payload?.output?.result !== undefined) {
+          return String(payload.output.result);
+        }
+      } catch {
+        // Ignore malformed historical tool messages.
+      }
+    }
+
+    return "o cálculo solicitado";
   }
-
-  const arithmetic = text.match(/(-?\d+(?:[.,]\d+)?)\s*([-+*/%])\s*(-?\d+(?:[.,]\d+)?)/);
-  if (arithmetic) {
-    return `${arithmetic[1].replace(",", ".")}${arithmetic[2]}${arithmetic[3].replace(",", ".")}`;
-  }
-
-  return undefined;
 }
 
 export class OpenAICompatibleProvider implements LLMProvider {
