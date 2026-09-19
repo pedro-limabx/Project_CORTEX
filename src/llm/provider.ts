@@ -1,5 +1,98 @@
 import type { LLMMessage, LLMProvider, LLMResponse, LLMToolCall } from "../domain/types.js";
 
+export class LocalTestProvider implements LLMProvider {
+  async chat(messages: LLMMessage[]): Promise<LLMResponse> {
+    const last = messages[messages.length - 1];
+
+    if (last?.role === "tool") {
+      let payload: any;
+      try {
+        payload = JSON.parse(last.content ?? "{}");
+      } catch {
+        payload = {};
+      }
+
+      if (payload?.ok && payload?.output?.result !== undefined) {
+        return {
+          provider: "local-test",
+          model: "cortex-deterministic-test",
+          text: `O resultado é ${payload.output.result}.`
+        };
+      }
+
+      if (payload?.ok && payload?.output?.iso) {
+        return {
+          provider: "local-test",
+          model: "cortex-deterministic-test",
+          text: `O horário atual do servidor é ${payload.output.iso}.`
+        };
+      }
+
+      return {
+        provider: "local-test",
+        model: "cortex-deterministic-test",
+        text: payload?.error
+          ? `Não consegui executar a ferramenta: ${payload.error}`
+          : "A ferramenta foi processada."
+      };
+    }
+
+    const userMessage = messages.find(m => m.role === "user")?.content ?? "";
+    const normalized = userMessage.toLowerCase();
+
+    if (/(hora|horário|horas)/i.test(normalized)) {
+      return {
+        provider: "local-test",
+        model: "cortex-deterministic-test",
+        text: "",
+        toolCalls: [{
+          id: cryptoRandomId(),
+          name: "system.time",
+          arguments: "{}"
+        }]
+      };
+    }
+
+    const expression = extractArithmeticExpression(normalized);
+    if (expression) {
+      return {
+        provider: "local-test",
+        model: "cortex-deterministic-test",
+        text: "",
+        toolCalls: [{
+          id: cryptoRandomId(),
+          name: "calculator.evaluate",
+          arguments: JSON.stringify({ expression })
+        }]
+      };
+    }
+
+    return {
+      provider: "local-test",
+      model: "cortex-deterministic-test",
+      text: "Estou em modo de teste local. Posso demonstrar o ciclo de ferramentas com cálculo e horário."
+    };
+  }
+}
+
+function cryptoRandomId(): string {
+  return `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function extractArithmeticExpression(text: string): string | undefined {
+  const multiplication = text.match(/(-?\\d+(?:[.,]\\d+)?)\\s*(?:vezes|x|multiplicado por)\\s*(-?\\d+(?:[.,]\\d+)?)/i);
+  if (multiplication) {
+    return `${multiplication[1].replace(",", ".")}*${multiplication[2].replace(",", ".")}`;
+  }
+
+  const arithmetic = text.match(/(-?\\d+(?:[.,]\\d+)?)\\s*([+\\-*/%])\\s*(-?\\d+(?:[.,]\\d+)?)/);
+  if (arithmetic) {
+    return `${arithmetic[1].replace(",", ".")}${arithmetic[2]}${arithmetic[3].replace(",", ".")}`;
+  }
+
+  return undefined;
+}
+
 export class OpenAICompatibleProvider implements LLMProvider {
   constructor(
     private readonly baseUrl: string,
@@ -14,7 +107,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     if (!this.apiKey || !this.model) {
       return {
         provider: "unconfigured",
-        text: "NEURON está em modo local de desenvolvimento. Configure LLM_API_KEY e LLM_MODEL para habilitar um modelo externo."
+        text: "NEURON está sem um provedor de LLM configurado."
       };
     }
 
