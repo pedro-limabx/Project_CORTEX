@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { config } from "./config.js";
 import { InMemoryStore } from "./memory/store.js";
-import { OpenAICompatibleProvider } from "./llm/provider.js";
+import { LocalTestProvider, OpenAICompatibleProvider } from "./llm/provider.js";
 import { NeuronCore } from "./neuron/core.js";
 import { ToolExecutor } from "./tools/executor.js";
 import { calculatorTool, timeTool } from "./tools/builtin.js";
@@ -17,14 +17,16 @@ registry.register(calculatorTool);
 registry.register(timeTool);
 
 const executor = new ToolExecutor(registry);
-const llm = new OpenAICompatibleProvider(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL);
+const llm = config.LOCAL_TEST_MODE
+  ? new LocalTestProvider()
+  : new OpenAICompatibleProvider(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL);
 const neuron = new NeuronCore(llm, memory, registry, executor);
 
 app.get("/health", async () => ({
   ok: true,
   service: "cortex",
   intelligence: "neuron",
-  version: "0.2.0",
+  version: "0.3.0",
   timestamp: new Date().toISOString()
 }));
 
