@@ -80,12 +80,12 @@ function cryptoRandomId(): string {
 }
 
 function extractArithmeticExpression(text: string): string | undefined {
-  const multiplication = text.match(/(-?\\d+(?:[.,]\\d+)?)\\s*(?:vezes|x|multiplicado por)\\s*(-?\\d+(?:[.,]\\d+)?)/i);
+  const multiplication = text.match(/(-?\d+(?:[.,]\d+)?)\s*(?:vezes|x|multiplicado por)\s*(-?\d+(?:[.,]\d+)?)/i);
   if (multiplication) {
     return `${multiplication[1].replace(",", ".")}*${multiplication[2].replace(",", ".")}`;
   }
 
-  const arithmetic = text.match(/(-?\\d+(?:[.,]\\d+)?)\\s*([-+*/%])\\s*(-?\\d+(?:[.,]\\d+)?)/);
+  const arithmetic = text.match(/(-?\d+(?:[.,]\d+)?)\s*([-+*/%])\s*(-?\d+(?:[.,]\d+)?)/);
   if (arithmetic) {
     return `${arithmetic[1].replace(",", ".")}${arithmetic[2]}${arithmetic[3].replace(",", ".")}`;
   }
