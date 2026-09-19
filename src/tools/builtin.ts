@@ -3,7 +3,7 @@ import type { ToolDefinition } from "../domain/types.js";
 
 export const calculatorTool: ToolDefinition<{ expression: string }, { result: number }> = {
   name: "calculator.evaluate",
-  version: "1.1.1",
+  version: "1.1.2",
   description: "Evaluate a basic arithmetic expression.",
   risk: "LOW",
   permissions: [],
@@ -74,17 +74,17 @@ export const calculatorTool: ToolDefinition<{ expression: string }, { result: nu
         values.push(0);
       }
 
-      const topOperator = operators[operators.length - 1];
-      const topPrecedence = topOperator === undefined ? -1 : precedence[topOperator];
       const tokenPrecedence = precedence[token];
-
       if (tokenPrecedence === undefined) throw new Error("Invalid operator");
 
-      while (
-        operators.length > 0 &&
-        topOperator !== "(" &&
-        topPrecedence >= tokenPrecedence
-      ) {
+      while (operators.length > 0) {
+        const topOperator = operators[operators.length - 1];
+        if (topOperator === "(") break;
+
+        const topPrecedence = precedence[topOperator];
+        if (topPrecedence === undefined) throw new Error("Invalid operator");
+
+        if (topPrecedence < tokenPrecedence) break;
         apply();
       }
 
