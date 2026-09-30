@@ -10,7 +10,9 @@ const schema = z.object({
   LLM_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   LLM_API_KEY: z.string().optional(),
   LLM_MODEL: z.string().optional(),
-  CORS_ORIGIN: z.string().default("http://localhost:5173")
+  CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  CORTEX_API_TOKEN: z.string().min(32).optional(),
+  CORTEX_USER_ID: z.string().min(1).default("local-user")
 });
 
 export const config = schema.parse(process.env);
