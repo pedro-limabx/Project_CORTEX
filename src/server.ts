@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import crypto from "node:crypto";
 import cors from "@fastify/cors";
 import { config } from "./config.js";
 import { InMemoryAuditStore, type AuditStore } from "./audit/store.js";
@@ -13,6 +14,23 @@ import { calculatorTool, timeTool } from "./tools/builtin.js";
 import { ToolRegistry } from "./tools/registry.js";
 
 const app = Fastify({ logger: true });
+
+if (config.NODE_ENV === "production" && !config.CORTEX_API_TOKEN) {
+  throw new Error("CORTEX_API_TOKEN is required in production");
+}
+
+function authenticate(request: { headers: Record<string, string | string[] | undefined> }, reply: { code: (status: number) => { send: (body: unknown) => unknown } }): unknown {
+  if (!config.CORTEX_API_TOKEN) return;
+  const authorization = request.headers.authorization;
+  const supplied = typeof authorization === "string" && authorization.startsWith("Bearer ")
+    ? authorization.slice(7)
+    : "";
+  const expectedBuffer = Buffer.from(config.CORTEX_API_TOKEN);
+  const suppliedBuffer = Buffer.from(supplied);
+  const valid = suppliedBuffer.length === expectedBuffer.length
+    && crypto.timingSafeEqual(suppliedBuffer, expectedBuffer);
+  if (!valid) return reply.code(401).send({ error: "Unauthorized" });
+}
 await app.register(cors, { origin: config.CORS_ORIGIN });
 
 const pool = config.DATABASE_URL ? new Pool({ connectionString: config.DATABASE_URL }) : undefined;
@@ -48,7 +66,7 @@ app.get("/health", async () => ({
   timestamp: new Date().toISOString()
 }));
 
-app.get("/api/tools", async () => registry.list().map(t => ({
+app.get("/api/tools", { preHandler: authenticate }, async () => registry.list().map(t => ({
   name: t.name,
   version: t.version,
   description: t.description,
@@ -56,7 +74,7 @@ app.get("/api/tools", async () => registry.list().map(t => ({
   permissions: t.permissions
 })));
 
-app.post("/api/chat", async (request, reply) => {
+app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
   const body = request.body as {
     message?: unknown;
     userId?: unknown;
@@ -69,27 +87,9 @@ app.post("/api/chat", async (request, reply) => {
     return reply.code(400).send({ error: "message is required" });
   }
 
-  const permissions = Array.isArray(body.grantedPermissions)
-    ? body.grantedPermissions.filter((p): p is string => typeof p === "string")
-    : [];
-  const approvals = Array.isArray(body.approvedToolCalls)
-    ? body.approvedToolCalls.filter((p): p is string => typeof p === "string")
-    : [];
-
-  const userId = typeof body.userId === "string" && body.userId.trim() ? body.userId : "local-user";
-  return neuron.respond(userId, body.message.trim(), {
-    grantedPermissions: permissions as any,
-    approvedToolCalls: approvals,
+  // Identity is server-controlled; clients cannot grant permissions or approve tools.
+  return neuron.respond(config.CORTEX_USER_ID, body.message.trim(), {
+    grantedPermissions: [],
+    approvedToolCalls: [],
     dryRun: body.dryRun === true
   });
-});
-
-const shutdown = async () => {
-  await app.close();
-  await pool?.end();
-  process.exit(0);
-};
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-
-await app.listen({ port: config.PORT, host: config.HOST });
