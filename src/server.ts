@@ -1,7 +1,9 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { config } from "./config.js";
-import { InMemoryStore } from "./memory/store.js";
+import { Pool } from "pg";
+import { InMemoryStore, type MemoryStore } from "./memory/store.js";
+import { PostgresMemoryStore } from "./memory/postgres-store.js";
 import { LocalTestProvider, OpenAICompatibleProvider } from "./llm/provider.js";
 import { NeuronCore } from "./neuron/core.js";
 import { ToolExecutor } from "./tools/executor.js";
@@ -11,7 +13,17 @@ import { ToolRegistry } from "./tools/registry.js";
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: config.CORS_ORIGIN });
 
-const memory = new InMemoryStore();
+const pool = config.DATABASE_URL ? new Pool({ connectionString: config.DATABASE_URL }) : undefined;
+let memory: MemoryStore;
+if (pool) {
+  const postgresMemory = new PostgresMemoryStore(pool);
+  await postgresMemory.initialize();
+  memory = postgresMemory;
+  app.log.info("Persistent PostgreSQL memory enabled");
+} else {
+  memory = new InMemoryStore();
+  app.log.warn("DATABASE_URL is not set; using in-memory memory store");
+}
 const registry = new ToolRegistry();
 registry.register(calculatorTool);
 registry.register(timeTool);
@@ -68,6 +80,7 @@ app.post("/api/chat", async (request, reply) => {
 
 const shutdown = async () => {
   await app.close();
+  await pool?.end();
   process.exit(0);
 };
 process.on("SIGINT", shutdown);
