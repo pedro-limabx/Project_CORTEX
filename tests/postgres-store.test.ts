@@ -4,10 +4,7 @@ import type { MemoryRecord } from "../src/domain/types.js";
 import { PostgresMemoryStore } from "../src/memory/postgres-store.js";
 
 function makeStore(rows: unknown[] = []) {
-  const query = vi.fn()
-    .mockResolvedValueOnce({ rows: [] })
-    .mockResolvedValueOnce({ rows: [] })
-    .mockResolvedValue({ rows });
+  const query = vi.fn(async (..._args: unknown[]) => ({ rows }));
   const pool = { query } as unknown as Pool;
   return { store: new PostgresMemoryStore(pool), query };
 }
