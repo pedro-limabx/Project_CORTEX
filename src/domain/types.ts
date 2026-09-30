@@ -36,6 +36,17 @@ export interface MemoryRecord {
   updatedAt: string;
 }
 
+export interface AuditRecord {
+  id: string;
+  userId: string;
+  requestId: string;
+  tool: string;
+  ok: boolean;
+  requiresApproval: boolean;
+  error?: string;
+  createdAt: string;
+}
+
 export interface LLMToolCall {
   id: string;
   name: string;
