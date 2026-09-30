@@ -20,6 +20,17 @@
 - autorização insuficiente;
 - falhas de terceiros.
 
-## Próxima etapa
+## Autenticação atual
 
-Adicionar autenticação, RBAC/ABAC, auditoria persistente, rate limiting e sandbox para execução de computador.
+- `CORTEX_API_TOKEN` habilita autenticação Bearer nas rotas `/api/chat` e `/api/tools`.
+- O token deve ter pelo menos 32 caracteres; em `NODE_ENV=production`, sua ausência impede a inicialização.
+- A comparação do token usa `timingSafeEqual` após validar o tamanho.
+- `CORTEX_USER_ID` define a identidade no servidor. O `userId` enviado pelo cliente é ignorado.
+- Permissões e aprovações enviadas no corpo da requisição não são aceitas.
+- Sem token em desenvolvimento, as rotas permanecem abertas para facilitar testes locais. Não exponha esse modo à rede pública.
+
+Esta é uma autenticação por token compartilhado para uma instalação de usuário único, não um sistema de contas multiusuário. Rotação de tokens, rate limiting e RBAC persistente ainda não existem.
+
+## Próximas etapas de segurança
+
+Adicionar rotação segura de tokens, rate limiting, fluxo confiável de aprovação, políticas de retenção da auditoria e sandbox para execução de computador.
