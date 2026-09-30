@@ -1,6 +1,8 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { config } from "./config.js";
+import { InMemoryAuditStore } from "./audit/store.js";
+import { PostgresAuditStore } from "./audit/postgres-store.js";
 import { Pool } from "pg";
 import { InMemoryStore, type MemoryStore } from "./memory/store.js";
 import { PostgresMemoryStore } from "./memory/postgres-store.js";
@@ -15,9 +17,13 @@ await app.register(cors, { origin: config.CORS_ORIGIN });
 
 const pool = config.DATABASE_URL ? new Pool({ connectionString: config.DATABASE_URL }) : undefined;
 let memory: MemoryStore;
+let audit = new InMemoryAuditStore();
 if (pool) {
   const postgresMemory = new PostgresMemoryStore(pool);
   await postgresMemory.initialize();
+  const postgresAudit = new PostgresAuditStore(pool);
+  await postgresAudit.initialize();
+  audit = postgresAudit;
   memory = postgresMemory;
   app.log.info("Persistent PostgreSQL memory enabled");
 } else {
@@ -32,7 +38,7 @@ const executor = new ToolExecutor(registry);
 const llm = config.LOCAL_TEST_MODE
   ? new LocalTestProvider()
   : new OpenAICompatibleProvider(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL);
-const neuron = new NeuronCore(llm, memory, registry, executor);
+const neuron = new NeuronCore(llm, memory, registry, executor, audit);
 
 app.get("/health", async () => ({
   ok: true,
