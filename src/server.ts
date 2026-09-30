@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { config } from "./config.js";
-import { InMemoryAuditStore } from "./audit/store.js";
+import { InMemoryAuditStore, type AuditStore } from "./audit/store.js";
 import { PostgresAuditStore } from "./audit/postgres-store.js";
 import { Pool } from "pg";
 import { InMemoryStore, type MemoryStore } from "./memory/store.js";
@@ -17,7 +17,7 @@ await app.register(cors, { origin: config.CORS_ORIGIN });
 
 const pool = config.DATABASE_URL ? new Pool({ connectionString: config.DATABASE_URL }) : undefined;
 let memory: MemoryStore;
-let audit = new InMemoryAuditStore();
+let audit: AuditStore = new InMemoryAuditStore();
 if (pool) {
   const postgresMemory = new PostgresMemoryStore(pool);
   await postgresMemory.initialize();
