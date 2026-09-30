@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import crypto from "node:crypto";
 import cors from "@fastify/cors";
 import { config } from "./config.js";
@@ -19,7 +19,7 @@ if (config.NODE_ENV === "production" && !config.CORTEX_API_TOKEN) {
   throw new Error("CORTEX_API_TOKEN is required in production");
 }
 
-function authenticate(request: { headers: Record<string, string | string[] | undefined> }, reply: { code: (status: number) => { send: (body: unknown) => unknown } }): unknown {
+async function authenticate(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!config.CORTEX_API_TOKEN) return;
   const authorization = request.headers.authorization;
   const supplied = typeof authorization === "string" && authorization.startsWith("Bearer ")
@@ -29,7 +29,9 @@ function authenticate(request: { headers: Record<string, string | string[] | und
   const suppliedBuffer = Buffer.from(supplied);
   const valid = suppliedBuffer.length === expectedBuffer.length
     && crypto.timingSafeEqual(suppliedBuffer, expectedBuffer);
-  if (!valid) return reply.code(401).send({ error: "Unauthorized" });
+  if (!valid) {
+    reply.code(401).send({ error: "Unauthorized" });
+  }
 }
 await app.register(cors, { origin: config.CORS_ORIGIN });
 
