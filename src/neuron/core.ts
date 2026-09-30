@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import crypto from "node:crypto";
 import type { AuditRecord, LLMMessage, LLMProvider, Permission, ToolContext } from "../domain/types.js";
 import type { MemoryStore } from "../memory/store.js";
 import type { AuditStore } from "../audit/store.js";
@@ -43,9 +42,10 @@ export interface RespondOptions {
 export class NeuronCore {
   constructor(
     private readonly llm: LLMProvider,
-    private readonly memory: InMemoryStore,
+    private readonly memory: MemoryStore,
     private readonly registry: ToolRegistry,
-    private readonly executor: ToolExecutor
+    private readonly executor: ToolExecutor,
+    private readonly audit?: AuditStore
   ) {}
 
   async respond(
