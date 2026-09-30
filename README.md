@@ -2,7 +2,7 @@
 
 **CORTEX** é o projeto/ecossistema que fornece a infraestrutura para a **NEURON**, a inteligência artificial central.
 
-## Estado atual — v0.2.0
+## Estado atual — v0.3.0
 
 A fundação agora possui um ciclo agentivo inicial:
 
@@ -16,7 +16,7 @@ A fundação agora possui um ciclo agentivo inicial:
 - Aprovação explícita para ações HIGH/CRITICAL.
 - Dry-run.
 - Timeout e tratamento de erros das ferramentas.
-- Memória de sessão em processo.
+- Memória de sessão em processo ou persistente via PostgreSQL.\n- Auditoria de chamadas de ferramentas em memória ou PostgreSQL.\n- Autenticação opcional por token Bearer; obrigatória em produção.\n- Identidade de usuário controlada pelo servidor; permissões não são aceitas do cliente.
 - Calculadora sem `eval`/`Function`.
 - API HTTP para chat e catálogo de ferramentas.
 
