@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
-import type { LLMMessage, LLMProvider, Permission, ToolContext } from "../domain/types.js";
-import { InMemoryStore } from "../memory/store.js";
+import crypto from "node:crypto";
+import type { AuditRecord, LLMMessage, LLMProvider, Permission, ToolContext } from "../domain/types.js";
+import type { MemoryStore } from "../memory/store.js";
+import type { AuditStore } from "../audit/store.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { ToolRegistry } from "../tools/registry.js";
 
@@ -129,6 +131,19 @@ export class NeuronCore {
         } satisfies ToolContext, approved.has(call.id) || approved.has(call.name));
 
         toolResults.push(execution);
+        if (this.audit) {
+          const auditEntry: AuditRecord = {
+            id: crypto.randomUUID(),
+            userId,
+            requestId,
+            tool: call.name,
+            ok: execution.ok,
+            requiresApproval: execution.requiresApproval ?? false,
+            ...(execution.error ? { error: execution.error.slice(0, 1000) } : {}),
+            createdAt: new Date().toISOString()
+          };
+          await this.audit.record(auditEntry);
+        }
         messages.push({
           role: "tool",
           tool_call_id: call.id,
