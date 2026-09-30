@@ -29,10 +29,9 @@ async function authenticate(request: FastifyRequest, reply: FastifyReply): Promi
   const suppliedBuffer = Buffer.from(supplied);
   const valid = suppliedBuffer.length === expectedBuffer.length
     && crypto.timingSafeEqual(suppliedBuffer, expectedBuffer);
-  if (!valid) {
-    reply.code(401).send({ error: "Unauthorized" });
-  }
+  if (!valid) reply.code(401).send({ error: "Unauthorized" });
 }
+
 await app.register(cors, { origin: config.CORS_ORIGIN });
 
 const pool = config.DATABASE_URL ? new Pool({ connectionString: config.DATABASE_URL }) : undefined;
@@ -45,11 +44,12 @@ if (pool) {
   await postgresAudit.initialize();
   audit = postgresAudit;
   memory = postgresMemory;
-  app.log.info("Persistent PostgreSQL memory enabled");
+  app.log.info("Persistent PostgreSQL memory and audit enabled");
 } else {
   memory = new InMemoryStore();
-  app.log.warn("DATABASE_URL is not set; using in-memory memory store");
+  app.log.warn("DATABASE_URL is not set; using in-memory memory and audit stores");
 }
+
 const registry = new ToolRegistry();
 registry.register(calculatorTool);
 registry.register(timeTool);
@@ -77,13 +77,9 @@ app.get("/api/tools", { preHandler: authenticate }, async () => registry.list().
 })));
 
 app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
-  const body = request.body as {
-    message?: unknown;
-    userId?: unknown;
-    grantedPermissions?: unknown;
-    approvedToolCalls?: unknown;
-    dryRun?: unknown;
-  };
+  const body = request.body && typeof request.body === "object"
+    ? request.body as { message?: unknown; dryRun?: unknown }
+    : {};
 
   if (typeof body.message !== "string" || body.message.trim().length === 0) {
     return reply.code(400).send({ error: "message is required" });
@@ -95,3 +91,14 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
     approvedToolCalls: [],
     dryRun: body.dryRun === true
   });
+});
+
+const shutdown = async () => {
+  await app.close();
+  await pool?.end();
+  process.exit(0);
+};
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+await app.listen({ port: config.PORT, host: config.HOST });
