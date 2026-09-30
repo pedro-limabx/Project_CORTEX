@@ -21,10 +21,9 @@ A fundação agora possui um ciclo agentivo inicial:
 - API HTTP para chat e catálogo de ferramentas.
 
 ### Ainda não implementado
-- Memória persistente PostgreSQL.
-- Autenticação e identidade reais.
-- Permission Engine persistente.
-- Auditoria persistente.
+- Contas multiusuário e gestão/rotação de credenciais.
+- Permission Engine persistente e fluxo confiável de aprovação.
+- Rate limiting e políticas de retenção de auditoria.
 - Browser/computer gateway.
 - Voz.
 - Telefonia.
