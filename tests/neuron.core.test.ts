@@ -121,7 +121,8 @@ describe("NEURON local replanning", () => {
       new InMemoryStore(),
       registry,
       new ToolExecutor(registry),
-      new PermissionEngine(new InMemoryPermissionStore())
+      new PermissionEngine(new InMemoryPermissionStore()),
+      new ApprovalEngine(new InMemoryApprovalStore())
     );
 
     const result = await core.respond(
