@@ -1,4 +1,18 @@
+import crypto from "node:crypto";
 import type { LLMMessage, LLMProvider, LLMResponse, LLMToolCall } from "../domain/types.js";
+
+function cryptoRandomId(): string {
+  return crypto.randomUUID();
+}
+
+function extractArithmeticExpression(text: string): string | undefined {
+  const match = text.match(/(?:calcule|calculate|quanto é|resultado de)\\s+([0-9+\\-*/().\\s]+)/i);
+  if (match?.[1]) return match[1].replace(/\\s+/g, "");
+
+  const direct = text.match(/\\b[0-9]+(?:\\s*[+\\-*/]\\s*[0-9]+)+(?:\\s*[+\\-*/]\\s*[0-9]+)*\\b/);
+  return direct?.[0]?.replace(/\\s+/g, "");
+}
+
 
 export class LocalTestProvider implements LLMProvider {
   async chat(messages: LLMMessage[]): Promise<LLMResponse> {
