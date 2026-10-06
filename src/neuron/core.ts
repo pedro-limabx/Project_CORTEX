@@ -133,7 +133,7 @@ export class NeuronCore {
           requestId,
           dryRun: options.dryRun ?? false,
           grantedPermissions: granted
-        } satisfies ToolContext, approved.has(call.id) || approved.has(call.name));
+        } satisfies ToolContext, approved);
 
         toolResults.push(execution);
         if (this.audit) {
