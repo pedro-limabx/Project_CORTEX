@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
-import type { AuditRecord, LLMMessage, LLMProvider, Permission, ToolContext } from "../domain/types.js";
+import type { AuditRecord, LLMMessage, LLMProvider, ToolContext } from "../domain/types.js";
 import type { MemoryStore } from "../memory/store.js";
 import type { AuditStore } from "../audit/store.js";
+import { PermissionEngine } from "../permissions/engine.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { ToolRegistry } from "../tools/registry.js";
 
@@ -34,7 +35,6 @@ function toOpenAITool(tool: ReturnType<ToolRegistry["list"]>[number]) {
 }
 
 export interface RespondOptions {
-  grantedPermissions?: Permission[];
   approvedToolCalls?: string[];
   dryRun?: boolean;
 }
@@ -45,6 +45,7 @@ export class NeuronCore {
     private readonly memory: MemoryStore,
     private readonly registry: ToolRegistry,
     private readonly executor: ToolExecutor,
+    private readonly permissions: PermissionEngine,
     private readonly audit?: AuditStore
   ) {}
 
@@ -75,7 +76,7 @@ export class NeuronCore {
     ];
 
     const toolResults: unknown[] = [];
-    const granted = new Set<Permission>(options.grantedPermissions ?? []);
+    const granted = await this.permissions.getPermissions(userId);
     const approved = new Set(options.approvedToolCalls ?? []);
     let steps = 0;
 
