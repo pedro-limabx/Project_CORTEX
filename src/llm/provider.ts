@@ -6,11 +6,16 @@ function cryptoRandomId(): string {
 }
 
 function extractArithmeticExpression(text: string): string | undefined {
-  const match = text.match(/(?:calcule|calculate|quanto é|resultado de)\\s+([0-9+*/().\\s-]+)/i);
-  if (match?.[1]) return match[1].replace(/\\s+/g, "");
+  const natural = text.match(/(?:calcule|calculate|quanto é|resultado de)\s+(\d+(?:[.,]\d+)?)\s*(?:vezes|x|\*)\s*(\d+(?:[.,]\d+)?)/i);
+  if (natural?.[1] && natural?.[2]) {
+    return `${natural[1].replace(",", ".")}*${natural[2].replace(",", ".")}`;
+  }
 
-  const direct = text.match(/\\b[0-9]+(?:\\s*[+*/-]\\s*[0-9]+)+(?:\\s*[+*/-]\\s*[0-9]+)*\\b/);
-  return direct?.[0]?.replace(/\\s+/g, "");
+  const match = text.match(/(?:calcule|calculate|quanto é|resultado de)\s+([0-9+*/().\s-]+)/i);
+  if (match?.[1]) return match[1].replace(/\s+/g, "");
+
+  const direct = text.match(/\b[0-9]+(?:\s*[+*/-]\s*[0-9]+)+(?:\s*[+*/-]\s*[0-9]+)*\b/);
+  return direct?.[0]?.replace(/\s+/g, "");
 }
 
 
