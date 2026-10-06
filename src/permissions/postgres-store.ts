@@ -5,6 +5,18 @@ import type { PermissionGrant, PermissionStore } from "./store.js";
 export class PostgresPermissionStore implements PermissionStore {
   constructor(private readonly pool: Pool) {}
 
+  async initialize(): Promise<void> {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS neuron_permission_grants (
+        user_id TEXT NOT NULL,
+        permission TEXT NOT NULL,
+        granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        granted_by TEXT NOT NULL,
+        PRIMARY KEY (user_id, permission)
+      )
+    `);
+  }
+
   async listForUser(userId: string): Promise<PermissionGrant[]> {
     const result = await this.pool.query<{
       user_id: string;
