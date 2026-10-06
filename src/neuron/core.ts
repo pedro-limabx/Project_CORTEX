@@ -127,7 +127,17 @@ export class NeuronCore {
         }
 
         const toolDefinition = this.registry.get(call.name);
-        const approved = Boolean(options.approvalId && toolDefinition && await this.approvals.consume(options.approvalId, userId, call.name, input));
+        const hasPermissions = toolDefinition
+          ? toolDefinition.permissions.every(permission => granted.has(permission))
+          : false;
+        const approved = Boolean(
+          !options.dryRun
+          && toolDefinition
+          && toolDefinition.risk !== "LOW"
+          && hasPermissions
+          && options.approvalId
+          && await this.approvals.consume(options.approvalId, userId, call.name, input)
+        );
         const execution = await this.executor.execute(call.name, input, {
           userId,
           requestId,
