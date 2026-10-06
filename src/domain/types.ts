@@ -80,6 +80,7 @@ export interface ExecutionResult {
   tool: string;
   ok: boolean;
   requiresApproval?: boolean;
+  approvalId?: string;
   output?: unknown;
   error?: string;
 }
