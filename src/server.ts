@@ -10,6 +10,9 @@ import { PostgresMemoryStore } from "./memory/postgres-store.js";
 import { PermissionEngine } from "./permissions/engine.js";
 import { InMemoryPermissionStore } from "./permissions/in-memory-store.js";
 import { PostgresPermissionStore } from "./permissions/postgres-store.js";
+import { ApprovalEngine } from "./approval/engine.js";
+import { InMemoryApprovalStore } from "./approval/store.js";
+import { PostgresApprovalStore } from "./approval/postgres-store.js";
 import { LocalTestProvider, OpenAICompatibleProvider } from "./llm/provider.js";
 import { NeuronCore } from "./neuron/core.js";
 import { ToolExecutor } from "./tools/executor.js";
@@ -40,6 +43,7 @@ await app.register(cors, { origin: config.CORS_ORIGIN });
 const pool = config.DATABASE_URL ? new Pool({ connectionString: config.DATABASE_URL }) : undefined;
 let memory: MemoryStore;
 let permissions: PermissionEngine;
+let approvals: ApprovalEngine;
 let audit: AuditStore = new InMemoryAuditStore();
 if (pool) {
   const postgresMemory = new PostgresMemoryStore(pool);
@@ -47,6 +51,9 @@ if (pool) {
   const postgresPermissions = new PostgresPermissionStore(pool);
   await postgresPermissions.initialize();
   permissions = new PermissionEngine(postgresPermissions);
+  const postgresApprovals = new PostgresApprovalStore(pool);
+  await postgresApprovals.initialize();
+  approvals = new ApprovalEngine(postgresApprovals);
   const postgresAudit = new PostgresAuditStore(pool);
   await postgresAudit.initialize();
   audit = postgresAudit;
@@ -55,6 +62,7 @@ if (pool) {
 } else {
   memory = new InMemoryStore();
   permissions = new PermissionEngine(new InMemoryPermissionStore());
+  approvals = new ApprovalEngine(new InMemoryApprovalStore());
   app.log.warn("DATABASE_URL is not set; using in-memory memory, permissions and audit stores");
 }
 
@@ -66,7 +74,7 @@ const executor = new ToolExecutor(registry);
 const llm = config.LOCAL_TEST_MODE
   ? new LocalTestProvider()
   : new OpenAICompatibleProvider(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL);
-const neuron = new NeuronCore(llm, memory, registry, executor, permissions, audit);
+const neuron = new NeuronCore(llm, memory, registry, executor, permissions, approvals, audit);
 
 app.get("/health", async () => ({
   ok: true,
@@ -84,9 +92,25 @@ app.get("/api/tools", { preHandler: authenticate }, async () => registry.list().
   permissions: t.permissions
 })));
 
+app.post("/api/approvals/:id/approve", { preHandler: authenticate }, async (request, reply) => {
+  const params = request.params as { id?: string };
+  if (!params.id) return reply.code(400).send({ error: "approval id is required" });
+  const approval = await approvals.approve(params.id, config.CORTEX_USER_ID);
+  if (!approval) return reply.code(404).send({ error: "approval not found, expired, or already finalized" });
+  return { ok: true, approvalId: approval.id, approvedAt: approval.approvedAt, expiresAt: approval.expiresAt };
+});
+
+app.post("/api/approvals/:id/reject", { preHandler: authenticate }, async (request, reply) => {
+  const params = request.params as { id?: string };
+  if (!params.id) return reply.code(400).send({ error: "approval id is required" });
+  const approval = await approvals.reject(params.id, config.CORTEX_USER_ID);
+  if (!approval) return reply.code(404).send({ error: "approval not found or already finalized" });
+  return { ok: true, approvalId: approval.id, rejectedAt: approval.rejectedAt };
+});
+
 app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
   const body = request.body && typeof request.body === "object"
-    ? request.body as { message?: unknown; dryRun?: unknown }
+    ? request.body as { message?: unknown; dryRun?: unknown; approvalId?: unknown }
     : {};
 
   if (typeof body.message !== "string" || body.message.trim().length === 0) {
@@ -95,7 +119,7 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
 
   // Identity is server-controlled; clients cannot grant permissions or approve tools.
   return neuron.respond(config.CORTEX_USER_ID, body.message.trim(), {
-    approvedToolCalls: [],
+    approvalId: typeof body.approvalId === "string" ? body.approvalId : undefined,
     dryRun: body.dryRun === true
   });
 });
