@@ -160,6 +160,7 @@ export class NeuronCore {
           const request = toolDefinition
             ? await this.approvals.request(userId, call.name, input, toolDefinition.risk)
             : undefined;
+          if (request) execution.approvalId = request.id;
           await this.memory.save({
             id: crypto.randomUUID(),
             userId,
