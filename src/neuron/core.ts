@@ -3,6 +3,7 @@ import type { AuditRecord, LLMMessage, LLMProvider, ToolContext } from "../domai
 import type { MemoryStore } from "../memory/store.js";
 import type { AuditStore } from "../audit/store.js";
 import { PermissionEngine } from "../permissions/engine.js";
+import { ApprovalEngine } from "../approval/engine.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { ToolRegistry } from "../tools/registry.js";
 
@@ -35,7 +36,7 @@ function toOpenAITool(tool: ReturnType<ToolRegistry["list"]>[number]) {
 }
 
 export interface RespondOptions {
-  approvedToolCalls?: string[];
+  approvalId?: string;
   dryRun?: boolean;
 }
 
@@ -46,6 +47,7 @@ export class NeuronCore {
     private readonly registry: ToolRegistry,
     private readonly executor: ToolExecutor,
     private readonly permissions: PermissionEngine,
+    private readonly approvals: ApprovalEngine,
     private readonly audit?: AuditStore
   ) {}
 
@@ -77,7 +79,7 @@ export class NeuronCore {
 
     const toolResults: unknown[] = [];
     const granted = await this.permissions.getPermissions(userId);
-    const approved = new Set(options.approvedToolCalls ?? []);
+    
     let steps = 0;
 
     while (steps < MAX_STEPS) {
@@ -124,6 +126,8 @@ export class NeuronCore {
           continue;
         }
 
+        const toolDefinition = this.registry.get(call.name);
+        const approved = Boolean(options.approvalId && toolDefinition && await this.approvals.consume(options.approvalId, userId, call.name, input));
         const execution = await this.executor.execute(call.name, input, {
           userId,
           requestId,
@@ -153,11 +157,14 @@ export class NeuronCore {
         });
 
         if (execution.requiresApproval) {
+          const request = toolDefinition
+            ? await this.approvals.request(userId, call.name, input, toolDefinition.risk)
+            : undefined;
           await this.memory.save({
             id: crypto.randomUUID(),
             userId,
             kind: "ACTION",
-            content: `Approval pending: ${call.name} ${JSON.stringify(input).slice(0, 800)}`,
+            content: `Approval pending: ${call.name} ${JSON.stringify(input).slice(0, 800)}${request ? ` | approvalId=${request.id} | expiresAt=${request.expiresAt}` : ""}`,
             importance: 0.8,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
