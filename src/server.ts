@@ -7,6 +7,9 @@ import { PostgresAuditStore } from "./audit/postgres-store.js";
 import { Pool } from "pg";
 import { InMemoryStore, type MemoryStore } from "./memory/store.js";
 import { PostgresMemoryStore } from "./memory/postgres-store.js";
+import { PermissionEngine } from "./permissions/engine.js";
+import { InMemoryPermissionStore } from "./permissions/in-memory-store.js";
+import { PostgresPermissionStore } from "./permissions/postgres-store.js";
 import { LocalTestProvider, OpenAICompatibleProvider } from "./llm/provider.js";
 import { NeuronCore } from "./neuron/core.js";
 import { ToolExecutor } from "./tools/executor.js";
@@ -36,10 +39,14 @@ await app.register(cors, { origin: config.CORS_ORIGIN });
 
 const pool = config.DATABASE_URL ? new Pool({ connectionString: config.DATABASE_URL }) : undefined;
 let memory: MemoryStore;
+let permissions: PermissionEngine;
 let audit: AuditStore = new InMemoryAuditStore();
 if (pool) {
   const postgresMemory = new PostgresMemoryStore(pool);
   await postgresMemory.initialize();
+  const postgresPermissions = new PostgresPermissionStore(pool);
+  await postgresPermissions.initialize();
+  permissions = new PermissionEngine(postgresPermissions);
   const postgresAudit = new PostgresAuditStore(pool);
   await postgresAudit.initialize();
   audit = postgresAudit;
@@ -47,7 +54,8 @@ if (pool) {
   app.log.info("Persistent PostgreSQL memory and audit enabled");
 } else {
   memory = new InMemoryStore();
-  app.log.warn("DATABASE_URL is not set; using in-memory memory and audit stores");
+  permissions = new PermissionEngine(new InMemoryPermissionStore());
+  app.log.warn("DATABASE_URL is not set; using in-memory memory, permissions and audit stores");
 }
 
 const registry = new ToolRegistry();
@@ -58,7 +66,7 @@ const executor = new ToolExecutor(registry);
 const llm = config.LOCAL_TEST_MODE
   ? new LocalTestProvider()
   : new OpenAICompatibleProvider(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL);
-const neuron = new NeuronCore(llm, memory, registry, executor, audit);
+const neuron = new NeuronCore(llm, memory, registry, executor, permissions, audit);
 
 app.get("/health", async () => ({
   ok: true,
@@ -87,7 +95,6 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
 
   // Identity is server-controlled; clients cannot grant permissions or approve tools.
   return neuron.respond(config.CORTEX_USER_ID, body.message.trim(), {
-    grantedPermissions: [],
     approvedToolCalls: [],
     dryRun: body.dryRun === true
   });
