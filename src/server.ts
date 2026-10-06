@@ -118,10 +118,13 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
   }
 
   // Identity is server-controlled; clients cannot grant permissions or approve tools.
-  return neuron.respond(config.CORTEX_USER_ID, body.message.trim(), {
-    approvalId: typeof body.approvalId === "string" ? body.approvalId : undefined,
-    dryRun: body.dryRun === true
-  });
+  const options = body.dryRun === true
+    ? { dryRun: true as const, ...(typeof body.approvalId === "string" ? { approvalId: body.approvalId } : {}) }
+    : typeof body.approvalId === "string"
+      ? { approvalId: body.approvalId }
+      : {};
+
+  return neuron.respond(config.CORTEX_USER_ID, body.message.trim(), options);
 });
 
 const shutdown = async () => {
