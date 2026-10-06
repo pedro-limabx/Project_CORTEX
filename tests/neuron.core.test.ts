@@ -5,6 +5,8 @@ import { LocalTestProvider } from "../src/llm/provider.js";
 import { NeuronCore } from "../src/neuron/core.js";
 import { PermissionEngine } from "../src/permissions/engine.js";
 import { InMemoryPermissionStore } from "../src/permissions/in-memory-store.js";
+import { ApprovalEngine } from "../src/approval/engine.js";
+import { InMemoryApprovalStore } from "../src/approval/store.js";
 import { ToolExecutor } from "../src/tools/executor.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 import { calculatorTool, timeTool } from "../src/tools/builtin.js";
@@ -76,7 +78,8 @@ describe("NEURON chained tool flow", () => {
       new InMemoryStore(),
       registry,
       new ToolExecutor(registry),
-      new PermissionEngine(new InMemoryPermissionStore())
+      new PermissionEngine(new InMemoryPermissionStore()),
+      new ApprovalEngine(new InMemoryApprovalStore())
     );
 
     const result = await core.respond(
