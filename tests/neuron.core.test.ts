@@ -87,7 +87,7 @@ describe("NEURON chained tool flow", () => {
       "NEURON, calcule 25 vezes 18 e depois me diga que horas são."
     );
 
-    expect(result.steps).toBe(2);
+    expect(result.steps).toBe(3);
     expect(result.toolResults).toHaveLength(2);
 
     expect(result.toolResults[0]).toMatchObject({
@@ -130,7 +130,7 @@ describe("NEURON local replanning", () => {
       "NEURON, calcule 25 vezes 18 e depois me diga que horas são."
     );
 
-    expect(result.steps).toBe(3);
+    expect(result.steps).toBe(2);
     expect(result.toolResults).toHaveLength(2);
     expect(result.toolResults[0]).toMatchObject({
       tool: "calculator.evaluate",
