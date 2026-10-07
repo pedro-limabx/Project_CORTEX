@@ -222,3 +222,62 @@ describe("NEURON OpenAI tool naming", () => {
     });
   });
 });
+
+
+describe("NEURON adaptive planner", () => {
+  it("signals a replan after a failed tool execution", async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "test.fail",
+      version: "1.0.0",
+      description: "Always fails for planner tests.",
+      risk: "LOW",
+      permissions: [],
+      inputSchema: { parse: (value: unknown) => value },
+      async execute() {
+        throw new Error("simulated failure");
+      }
+    });
+    registry.register(calculatorTool);
+
+    let calls = 0;
+    const provider: LLMProvider = {
+      async chat(messages: LLMMessage[]): Promise<LLMResponse> {
+        calls++;
+        if (calls === 1) {
+          return {
+            provider: "test",
+            text: "",
+            toolCalls: [{ id: "fail-1", name: "test.fail", arguments: "{}" }]
+          };
+        }
+
+        expect(messages.some(message =>
+          message.role === "user" && message.content?.includes("Planner signal")
+        )).toBe(true);
+
+        return {
+          provider: "test",
+          text: "Replanejado após a falha."
+        };
+      }
+    };
+
+    const core = new NeuronCore(
+      provider,
+      new InMemoryStore(),
+      registry,
+      new ToolExecutor(registry),
+      new PermissionEngine(new InMemoryPermissionStore()),
+      new ApprovalEngine(new InMemoryApprovalStore())
+    );
+
+    const result = await core.respond("test-user", "Execute a tarefa com segurança.");
+
+    expect(result.plan).toMatchObject([
+      { index: 1, tool: "test.fail", status: "FAILED", error: "simulated failure" }
+    ]);
+    expect(result.steps).toBe(2);
+    expect(result.text).toBe("Replanejado após a falha.");
+  });
+});
