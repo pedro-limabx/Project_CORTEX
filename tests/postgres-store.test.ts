@@ -72,6 +72,26 @@ describe("PostgresMemoryStore", () => {
     }]);
   });
 
+  it("lists recent task memories for the requested user", async () => {
+    const { store, query } = makeStore([{
+      id: "task-1",
+      user_id: "user-1",
+      kind: "TASK",
+      content: "{\"status\":\"ACTIVE\"}",
+      importance: "0.7",
+      created_at: "2026-09-29T10:00:00.000Z",
+      updated_at: "2026-09-29T11:00:00.000Z"
+    }]);
+
+    const result = await store.listTasks("user-1", 3);
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]?.[0]).toContain("kind = 'TASK'");
+    expect(query.mock.calls[0]?.[1]).toEqual(["user-1", 3]);
+    expect(result[0]?.kind).toBe("TASK");
+    expect(result[0]?.content).toBe("{\"status\":\"ACTIVE\"}");
+  });
+
   it("does not query the database for invalid limits", async () => {
     const { store, query } = makeStore();
     await expect(store.search("user-1", "anything", 0)).resolves.toEqual([]);
