@@ -1,5 +1,7 @@
 export type PlanStepStatus = "PLANNED" | "COMPLETED" | "FAILED" | "AWAITING_APPROVAL";
 
+export type PlanStatus = "ACTIVE" | "REPLANNING" | "COMPLETED" | "FAILED";
+
 export interface PlanStep {
   index: number;
   tool: string;
@@ -8,19 +10,38 @@ export interface PlanStep {
   error?: string;
 }
 
+export interface ExecutionPlan {
+  objective: string;
+  status: PlanStatus;
+  currentStep?: number;
+  revision: number;
+  steps: PlanStep[];
+}
+
 export class ExecutionPlanner {
   private readonly steps: PlanStep[] = [];
+  private status: PlanStatus = "ACTIVE";
+  private currentStep?: number;
+  private revision = 1;
 
   constructor(private readonly objective: string) {}
 
   begin(tool: string, input: unknown): PlanStep {
+    if (this.status === "COMPLETED" || this.status === "FAILED") {
+      this.status = "ACTIVE";
+      this.revision++;
+    }
+
     const step: PlanStep = {
       index: this.steps.length + 1,
       tool,
       input,
       status: "PLANNED"
     };
+
     this.steps.push(step);
+    this.currentStep = step.index;
+    this.status = "ACTIVE";
     return step;
   }
 
@@ -30,18 +51,53 @@ export class ExecutionPlanner {
       : ok
         ? "COMPLETED"
         : "FAILED";
+
     if (error) step.error = error.slice(0, 500);
+
+    if (step.status === "FAILED") {
+      this.status = "REPLANNING";
+      this.currentStep = step.index;
+    } else if (step.status === "AWAITING_APPROVAL") {
+      this.status = "ACTIVE";
+      this.currentStep = step.index;
+    } else {
+      this.currentStep = undefined;
+    }
   }
 
   shouldReplan(step: PlanStep): boolean {
-    return step.status === "FAILED";
+    if (step.status !== "FAILED") return false;
+    this.status = "REPLANNING";
+    return true;
+  }
+
+  markCompleted(): void {
+    if (this.steps.length === 0 || this.steps.every(step => step.status === "COMPLETED")) {
+      this.status = "COMPLETED";
+      this.currentStep = undefined;
+    }
+  }
+
+  markFailed(): void {
+    this.status = "FAILED";
+    this.currentStep = undefined;
   }
 
   getObjective(): string {
     return this.objective;
   }
 
-  snapshot(): PlanStep[] {
-    return this.steps.map(step => ({ ...step }));
+  getStatus(): PlanStatus {
+    return this.status;
+  }
+
+  snapshot(): ExecutionPlan {
+    return {
+      objective: this.objective,
+      status: this.status,
+      currentStep: this.currentStep,
+      revision: this.revision,
+      steps: this.steps.map(step => ({ ...step }))
+    };
   }
 }
