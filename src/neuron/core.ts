@@ -176,7 +176,7 @@ export class NeuronCore {
         if (planner.shouldReplan(planStep)) {
           messages.push({
             role: "user",
-            content: `Planner signal: the previous step failed (${planStep.tool}). Reassess the objective and choose the next best action. Do not assume the failed action succeeded.`
+            content: `Planner signal: step ${planStep.index} failed (${planStep.tool}). Objective: "${planner.getObjective()}". Reassess the objective, choose the next best action, and do not assume the failed action succeeded.`
           });
         }
         toolResults.push(execution);
@@ -199,6 +199,12 @@ export class NeuronCore {
           name: call.name,
           content: JSON.stringify(execution)
         });
+
+        if (!execution.requiresApproval && execution.ok) {
+          planner.markCompleted();
+        } else if (!execution.requiresApproval && !execution.ok && !planner.shouldReplan(planStep)) {
+          planner.markFailed();
+        }
 
         if (execution.requiresApproval) {
           const request = toolDefinition && canonicalToolName
