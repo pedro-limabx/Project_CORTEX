@@ -109,20 +109,23 @@ export class NeuronCore {
 
     const toolResults: unknown[] = [];
     const granted = await this.permissions.getPermissions(userId);
-    const planner = new ExecutionPlanner(message);
+
+    let savedPlan: ReturnType<ExecutionPlanner["snapshot"]> | undefined;
     let taskMemoryId: string | undefined;
+
     if (options.resumeTaskId) {
       const task = await this.memory.getTask(userId, options.resumeTaskId);
       if (!task) throw new Error("Task not found");
-      let savedPlan: ReturnType<ExecutionPlanner["snapshot"]>;
       try {
         savedPlan = JSON.parse(task.content);
       } catch {
         throw new Error("Persisted task is invalid");
       }
-      planner.restore(savedPlan);
       taskMemoryId = task.id;
     }
+
+    const planner = new ExecutionPlanner(savedPlan?.objective ?? message);
+    if (savedPlan) planner.restore(savedPlan);
     const persistPlan = async (): Promise<void> => {
       const plan = planner.snapshot();
       if (plan.steps.length === 0) return;
