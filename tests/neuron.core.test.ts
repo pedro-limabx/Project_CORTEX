@@ -274,9 +274,15 @@ describe("NEURON adaptive planner", () => {
 
     const result = await core.respond("test-user", "Execute a tarefa com segurança.");
 
-    expect(result.plan).toMatchObject([
-      { index: 1, tool: "test.fail", status: "FAILED", error: "simulated failure" }
-    ]);
+    expect(result.plan).toMatchObject({
+      objective: "Execute a tarefa com segurança.",
+      status: "REPLANNING",
+      revision: 1,
+      currentStep: 1,
+      steps: [
+        { index: 1, tool: "test.fail", status: "FAILED", error: "simulated failure" }
+      ]
+    });
     expect(result.steps).toBe(2);
     expect(result.text).toBe("Replanejado após a falha.");
   });
