@@ -114,7 +114,7 @@ app.post("/api/approvals/:id/reject", { preHandler: authenticate }, async (reque
 
 app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
   const body = request.body && typeof request.body === "object"
-    ? request.body as { message?: unknown; dryRun?: unknown; approvalId?: unknown }
+    ? request.body as { message?: unknown; dryRun?: unknown; approvalId?: unknown; resumeTaskId?: unknown }
     : {};
 
   if (typeof body.message !== "string" || body.message.trim().length === 0) {
@@ -123,10 +123,15 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
 
   // Identity is server-controlled; clients cannot grant permissions or approve tools.
   const options = body.dryRun === true
-    ? { dryRun: true as const, ...(typeof body.approvalId === "string" ? { approvalId: body.approvalId } : {}) }
-    : typeof body.approvalId === "string"
-      ? { approvalId: body.approvalId }
-      : {};
+    ? {
+        dryRun: true as const,
+        ...(typeof body.approvalId === "string" ? { approvalId: body.approvalId } : {}),
+        ...(typeof body.resumeTaskId === "string" ? { resumeTaskId: body.resumeTaskId } : {})
+      }
+    : {
+        ...(typeof body.approvalId === "string" ? { approvalId: body.approvalId } : {}),
+        ...(typeof body.resumeTaskId === "string" ? { resumeTaskId: body.resumeTaskId } : {})
+      };
 
   return neuron.respond(config.CORTEX_USER_ID, body.message.trim(), options);
 });
