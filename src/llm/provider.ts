@@ -231,10 +231,19 @@ export class OpenAICompatibleProvider {
         arguments: typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.arguments ?? {})
       }));
 
+    const outputText = typeof bodyJson.output_text === "string"
+      ? bodyJson.output_text
+      : output
+        .filter((item: any) => item?.type === "message")
+        .flatMap((item: any) => Array.isArray(item.content) ? item.content : [])
+        .filter((item: any) => item?.type === "output_text" && typeof item.text === "string")
+        .map((item: any) => item.text)
+        .join("");
+
     return {
       provider: "openai-responses",
       model: bodyJson.model ?? this.model,
-      text: typeof bodyJson.output_text === "string" ? bodyJson.output_text : "",
+      text: outputText,
       toolCalls,
       usage: { inputTokens: bodyJson.usage?.input_tokens, outputTokens: bodyJson.usage?.output_tokens }
     };
