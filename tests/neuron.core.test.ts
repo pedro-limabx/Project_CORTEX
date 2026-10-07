@@ -150,3 +150,75 @@ describe("NEURON local replanning", () => {
     expect(result.text).toContain(timeResult.output?.iso ?? "");
   });
 });
+
+
+describe("NEURON OpenAI tool naming", () => {
+  it("exposes OpenAI-safe tool names and maps them back to canonical names", async () => {
+    const registry = new ToolRegistry();
+    registry.register(calculatorTool);
+    registry.register(timeTool);
+
+    let firstTools: unknown[] = [];
+    let calls = 0;
+    const provider: LLMProvider = {
+      async chat(messages: LLMMessage[], options): Promise<LLMResponse> {
+        calls++;
+        if (calls === 1) {
+          firstTools = options?.tools ?? [];
+          return {
+            provider: "test",
+            model: "openai-compatible",
+            text: "",
+            toolCalls: [{
+              id: "call-calculator",
+              name: "calculator_evaluate",
+              arguments: JSON.stringify({ expression: "25*18" })
+            }]
+          };
+        }
+
+        const lastTool = messages[messages.length - 1];
+        expect(lastTool?.role).toBe("tool");
+        expect(JSON.parse(lastTool?.content ?? "{}")).toMatchObject({
+          tool: "calculator.evaluate",
+          ok: true,
+          output: { result: 450 }
+        });
+
+        return {
+          provider: "test",
+          model: "openai-compatible",
+          text: "O resultado é 450."
+        };
+      }
+    };
+
+    const core = new NeuronCore(
+      provider,
+      new InMemoryStore(),
+      registry,
+      new ToolExecutor(registry),
+      new PermissionEngine(new InMemoryPermissionStore()),
+      new ApprovalEngine(new InMemoryApprovalStore())
+    );
+
+    const result = await core.respond("test-user", "Calcule 25 vezes 18.");
+
+    expect(firstTools).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "function",
+        function: expect.objectContaining({ name: "calculator_evaluate" })
+      }),
+      expect.objectContaining({
+        type: "function",
+        function: expect.objectContaining({ name: "system_time" })
+      })
+    ]));
+    expect(result.text).toBe("O resultado é 450.");
+    expect(result.toolResults[0]).toMatchObject({
+      tool: "calculator.evaluate",
+      ok: true,
+      output: { result: 450 }
+    });
+  });
+});
