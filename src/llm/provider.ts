@@ -176,7 +176,7 @@ export class OpenAICompatibleProvider {
       };
     }
 
-    const input = messages.map(message => {
+    const input = messages.filter(message => message.role !== "system").map(message => {
       if (message.role === "assistant" && message.tool_calls?.length) {
         return message.tool_calls.map(call => ({
           type: "function_call",
