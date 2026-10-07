@@ -4,6 +4,7 @@ export interface MemoryStore {
   save(record: MemoryRecord): Promise<void>;
   search(userId: string, query: string, limit: number): Promise<MemoryRecord[]>;
   listTasks(userId: string, limit: number): Promise<MemoryRecord[]>;
+  getTask(userId: string, taskId: string): Promise<MemoryRecord | undefined>;
 }
 
 export class InMemoryStore implements MemoryStore {
@@ -19,6 +20,12 @@ export class InMemoryStore implements MemoryStore {
       .filter(r => r.userId === userId && r.content.toLowerCase().includes(q))
       .sort((a, b) => b.importance - a.importance)
       .slice(0, limit);
+  }
+
+  async getTask(userId: string, taskId: string): Promise<MemoryRecord | undefined> {
+    return this.records.find(record =>
+      record.userId === userId && record.kind === "TASK" && record.id === taskId
+    );
   }
 
   async listTasks(userId: string, limit: number): Promise<MemoryRecord[]> {
