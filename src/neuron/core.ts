@@ -170,7 +170,8 @@ export class NeuronCore {
           grantedPermissions: granted
         } satisfies ToolContext, approved);
 
-        planner.complete(planStep, execution.ok, execution.error, execution.requiresApproval ?? false);\n        toolResults.push(execution);
+        planner.complete(planStep, execution.ok, execution.error, execution.requiresApproval ?? false);
+        toolResults.push(execution);
         if (this.audit) {
           const auditEntry: AuditRecord = {
             id: crypto.randomUUID(),
