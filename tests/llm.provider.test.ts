@@ -70,7 +70,7 @@ describe("OpenAICompatibleProvider", () => {
       type: "function",
       name: "calculator.evaluate",
       description: "Evaluate arithmetic.",
-      parameters: tools[0].function.parameters,
+      parameters: tools[0]?.function.parameters,
       strict: false
     }]);
     expect(body.tool_choice).toBe("auto");
@@ -83,9 +83,10 @@ describe("OpenAICompatibleProvider", () => {
       usage: { inputTokens: 21, outputTokens: 8 }
     });
 
+    const toolCalls = first.toolCalls ?? [];
     const followupMessages: LLMMessage[] = [
       ...messages,
-      { role: "assistant", content: null, tool_calls: first.toolCalls },
+      { role: "assistant", content: null, tool_calls: toolCalls },
       {
         role: "tool",
         tool_call_id: "call-1",
