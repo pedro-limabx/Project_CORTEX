@@ -46,6 +46,29 @@ export class PostgresMemoryStore implements MemoryStore {
     );
   }
 
+  async getTask(userId: string, taskId: string): Promise<MemoryRecord | undefined> {
+    const result = await this.pool.query(
+      `SELECT id, user_id, kind, content, importance, created_at, updated_at
+       FROM neuron_memories
+       WHERE user_id = $1 AND kind = 'TASK' AND id = $2
+       LIMIT 1`,
+      [userId, taskId]
+    );
+
+    const row = result.rows[0];
+    if (!row) return undefined;
+
+    return {
+      id: String(row.id),
+      userId: String(row.user_id),
+      kind: row.kind,
+      content: String(row.content),
+      importance: Number(row.importance),
+      createdAt: new Date(row.created_at).toISOString(),
+      updatedAt: new Date(row.updated_at).toISOString()
+    };
+  }
+
   async listTasks(userId: string, limit: number): Promise<MemoryRecord[]> {
     if (!Number.isInteger(limit) || limit <= 0) return [];
 
