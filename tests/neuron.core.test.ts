@@ -287,3 +287,85 @@ describe("NEURON adaptive planner", () => {
     expect(result.text).toBe("Replanejado após a falha.");
   });
 });
+
+
+describe("NEURON persisted task resume", () => {
+  it("resumes a persisted task using the saved objective and task id", async () => {
+    const registry = new ToolRegistry();
+    registry.register(calculatorTool);
+
+    let calls = 0;
+    const provider: LLMProvider = {
+      async chat(messages: LLMMessage[]): Promise<LLMResponse> {
+        calls++;
+        if (calls === 1) {
+          return {
+            provider: "test",
+            text: "",
+            toolCalls: [{
+              id: "calc-1",
+              name: "calculator.evaluate",
+              arguments: JSON.stringify({ expression: "10+5" })
+            }]
+          };
+        }
+
+        expect(messages.some(message =>
+          message.role === "user" && message.content?.includes("Planner signal")
+        )).toBe(false);
+
+        const lastTool = messages[messages.length - 1];
+        expect(lastTool?.role).toBe("tool");
+        return {
+          provider: "test",
+          text: "Tarefa concluída."
+        };
+      }
+    };
+
+    const memory = new InMemoryStore();
+    const core = new NeuronCore(
+      provider,
+      memory,
+      registry,
+      new ToolExecutor(registry),
+      new PermissionEngine(new InMemoryPermissionStore()),
+      new ApprovalEngine(new InMemoryApprovalStore())
+    );
+
+    const first = await core.respond("test-user", "Calcule 10 + 5.");
+    expect(first.plan.status).toBe("COMPLETED");
+
+    const savedTask = await memory.getTask("test-user", "task:" + first.requestId + ":1");
+    expect(savedTask).toBeDefined();
+
+    const resumed = await core.respond("test-user", "continue", {
+      resumeTaskId: savedTask?.id
+    });
+
+    expect(resumed.plan.objective).toBe("Calcule 10 + 5.");
+    expect(resumed.plan.status).toBe("COMPLETED");
+    expect(resumed.plan.steps).toHaveLength(1);
+    expect(resumed.plan.steps[0]).toMatchObject({
+      index: 1,
+      tool: "calculator.evaluate",
+      status: "COMPLETED"
+    });
+    expect(resumed.text).toBe("Tarefa concluída.");
+  });
+
+  it("rejects an unknown task id", async () => {
+    const core = new NeuronCore(
+      new LocalTestProvider(),
+      new InMemoryStore(),
+      new ToolRegistry(),
+      new ToolExecutor(new ToolRegistry()),
+      new PermissionEngine(new InMemoryPermissionStore()),
+      new ApprovalEngine(new InMemoryApprovalStore())
+    );
+
+    await expect(
+      core.respond("test-user", "continue", { resumeTaskId: "missing-task" })
+    ).rejects.toThrow("Task not found");
+  });
+});
