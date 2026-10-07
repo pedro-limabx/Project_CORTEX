@@ -59,6 +59,7 @@ function toOpenAITool(tool: ReturnType<ToolRegistry["list"]>[number]) {
 export interface RespondOptions {
   approvalId?: string;
   dryRun?: boolean;
+  resumeTaskId?: string;
 }
 
 export class NeuronCore {
@@ -109,12 +110,25 @@ export class NeuronCore {
     const toolResults: unknown[] = [];
     const granted = await this.permissions.getPermissions(userId);
     const planner = new ExecutionPlanner(message);
+    let taskMemoryId: string | undefined;
+    if (options.resumeTaskId) {
+      const task = await this.memory.getTask(userId, options.resumeTaskId);
+      if (!task) throw new Error("Task not found");
+      let savedPlan: ReturnType<ExecutionPlanner["snapshot"]>;
+      try {
+        savedPlan = JSON.parse(task.content);
+      } catch {
+        throw new Error("Persisted task is invalid");
+      }
+      planner.restore(savedPlan);
+      taskMemoryId = task.id;
+    }
     const persistPlan = async (): Promise<void> => {
       const plan = planner.snapshot();
       if (plan.steps.length === 0) return;
       const now = new Date().toISOString();
       await this.memory.save({
-        id: `task:${requestId}:${plan.revision}`,
+        id: taskMemoryId ?? `task:${requestId}:${plan.revision}`,
         userId,
         kind: "TASK",
         content: JSON.stringify(plan),
