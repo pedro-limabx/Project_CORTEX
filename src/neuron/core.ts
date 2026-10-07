@@ -102,6 +102,20 @@ export class NeuronCore {
     const toolResults: unknown[] = [];
     const granted = await this.permissions.getPermissions(userId);
     const planner = new ExecutionPlanner(message);
+    const persistPlan = async (): Promise<void> => {
+      const plan = planner.snapshot();
+      if (plan.steps.length === 0) return;
+      const now = new Date().toISOString();
+      await this.memory.save({
+        id: `task:${requestId}:${plan.revision}`,
+        userId,
+        kind: "TASK",
+        content: JSON.stringify(plan),
+        importance: 0.7,
+        createdAt: now,
+        updatedAt: now
+      });
+    };
 
     let steps = 0;
 
@@ -113,6 +127,8 @@ export class NeuronCore {
       });
 
       if (!result.toolCalls?.length) {
+        planner.markCompleted();
+        await persistPlan();
         const text = result.text || "Não recebi uma resposta textual do modelo.";
         await this.memory.save({
           id: crypto.randomUUID(),
@@ -178,6 +194,7 @@ export class NeuronCore {
             role: "user",
             content: `Planner signal: step ${planStep.index} failed (${planStep.tool}). Objective: "${planner.getObjective()}". Reassess the objective, choose the next best action, and do not assume the failed action succeeded.`
           });
+          await persistPlan();
         }
         toolResults.push(execution);
         if (this.audit) {
