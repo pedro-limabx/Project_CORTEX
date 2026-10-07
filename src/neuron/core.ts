@@ -149,7 +149,8 @@ export class NeuronCore {
         const canonicalToolName = this.registry.get(call.name)
           ? call.name
           : this.registry.list().find(tool => modelToolName(tool.name) === call.name)?.name;
-        const toolDefinition = canonicalToolName ? this.registry.get(canonicalToolName) : undefined;\n        const planStep = planner.begin(canonicalToolName ?? call.name, input);
+        const toolDefinition = canonicalToolName ? this.registry.get(canonicalToolName) : undefined;
+        const planStep = planner.begin(canonicalToolName ?? call.name, input);
         const hasPermissions = toolDefinition
           ? toolDefinition.permissions.every(permission => granted.has(permission))
           : false;
