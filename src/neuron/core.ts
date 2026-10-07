@@ -6,6 +6,7 @@ import { PermissionEngine } from "../permissions/engine.js";
 import { ApprovalEngine } from "../approval/engine.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { ToolRegistry } from "../tools/registry.js";
+import { ExecutionPlanner } from "./planner.js";
 
 const MAX_STEPS = 8;
 const SYSTEM_PROMPT = `
@@ -120,7 +121,7 @@ export class NeuronCore {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
-        return { requestId, text, memories: memories.length, steps, toolResults };
+        return { requestId, text, memories: memories.length, steps, toolResults, plan: planner.snapshot() };
       }
 
       messages.push({
@@ -148,7 +149,7 @@ export class NeuronCore {
         const canonicalToolName = this.registry.get(call.name)
           ? call.name
           : this.registry.list().find(tool => modelToolName(tool.name) === call.name)?.name;
-        const toolDefinition = canonicalToolName ? this.registry.get(canonicalToolName) : undefined;
+        const toolDefinition = canonicalToolName ? this.registry.get(canonicalToolName) : undefined;\n        const planStep = planner.begin(canonicalToolName ?? call.name, input);
         const hasPermissions = toolDefinition
           ? toolDefinition.permissions.every(permission => granted.has(permission))
           : false;
@@ -168,7 +169,7 @@ export class NeuronCore {
           grantedPermissions: granted
         } satisfies ToolContext, approved);
 
-        toolResults.push(execution);
+        planner.complete(planStep, execution.ok, execution.error, execution.requiresApproval ?? false);\n        toolResults.push(execution);
         if (this.audit) {
           const auditEntry: AuditRecord = {
             id: crypto.randomUUID(),
