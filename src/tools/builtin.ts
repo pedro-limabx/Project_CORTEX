@@ -3,105 +3,103 @@ import type { ToolDefinition } from "../domain/types.js";
 
 export const calculatorTool: ToolDefinition<{ expression: string }, { result: number }> = {
   name: "calculator.evaluate",
-  version: "1.1.2",
-  description: "Evaluate a basic arithmetic expression.",
+  version: "1.2.0",
+  description: "Evaluate arithmetic expressions. Supports +, -, *, /, %, ^, parentheses, and sqrt(...). Use this tool for numerical calculations; do not use it for general factual questions.",
   risk: "LOW",
   permissions: [],
   inputSchema: z.object({ expression: z.string().min(1).max(200) }),
   async execute(input) {
-    const tokens = input.expression.match(/\d+(?:\.\d+)?|[()+\-*/%]/g);
-    if (!tokens || tokens.join("") !== input.expression.replace(/\s+/g, "")) {
+    const expression = input.expression.replace(/\s+/g, "");
+    const tokens = expression.match(/sqrt|\d+(?:\.\d+)?|[()+\-*/%^]/g);
+
+    if (!tokens || tokens.join("") !== expression) {
       throw new Error("Expression contains unsupported characters");
     }
 
-    const values: number[] = [];
-    const operators: string[] = [];
-    const precedence: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2, "%": 2 };
+    let index = 0;
 
-    const apply = () => {
-      const op = operators.pop();
-      if (!op) throw new Error("Invalid expression");
-      const b = values.pop();
-      const a = values.pop();
-      if (a === undefined || b === undefined) throw new Error("Invalid expression");
+    const peek = () => tokens[index];
+    const consume = () => tokens[index++];
 
-      let value: number;
-      if (op === "+") value = a + b;
-      else if (op === "-") value = a - b;
-      else if (op === "*") value = a * b;
-      else if (op === "/") {
-        if (b === 0) throw new Error("Division by zero");
-        value = a / b;
-      } else if (op === "%") {
-        if (b === 0) throw new Error("Division by zero");
-        value = a % b;
-      } else {
-        throw new Error("Invalid operator");
-      }
+    const parsePrimary = (): number => {
+      const token = consume();
+      if (!token) throw new Error("Invalid expression");
 
-      if (!Number.isFinite(value)) throw new Error("Invalid calculation result");
-      values.push(value);
-    };
+      if (token === "+") return parsePrimary();
+      if (token === "-") return -parsePrimary();
 
-    let expectValue = true;
-
-    for (const token of tokens) {
-      if (/^\d/.test(token)) {
-        if (!expectValue) throw new Error("Invalid expression");
-        values.push(Number(token));
-        expectValue = false;
-        continue;
+      if (token === "sqrt") {
+        if (consume() !== "(") throw new Error("sqrt requires parentheses");
+        const value = parseAdditive();
+        if (consume() !== ")") throw new Error("Invalid expression");
+        if (value < 0) throw new Error("Square root of a negative number");
+        const result = Math.sqrt(value);
+        if (!Number.isFinite(result)) throw new Error("Invalid calculation result");
+        return result;
       }
 
       if (token === "(") {
-        if (!expectValue) throw new Error("Invalid expression");
-        operators.push(token);
-        continue;
+        const value = parseAdditive();
+        if (consume() !== ")") throw new Error("Invalid expression");
+        return value;
       }
 
-      if (token === ")") {
-        if (expectValue) throw new Error("Invalid expression");
-        while (operators.length > 0 && operators[operators.length - 1] !== "(") {
-          apply();
+      if (!/^\d/.test(token)) throw new Error("Invalid expression");
+      const value = Number(token);
+      if (!Number.isFinite(value)) throw new Error("Invalid calculation result");
+      return value;
+    };
+
+    const parsePower = (): number => {
+      const left = parsePrimary();
+      if (peek() === "^") {
+        consume();
+        const right = parsePower();
+        const result = left ** right;
+        if (!Number.isFinite(result)) throw new Error("Invalid calculation result");
+        return result;
+      }
+      return left;
+    };
+
+    const parseMultiplicative = (): number => {
+      let value = parsePower();
+
+      while (peek() === "*" || peek() === "/" || peek() === "%") {
+        const operator = consume();
+        const right = parsePower();
+
+        if ((operator === "/" || operator === "%") && right === 0) {
+          throw new Error("Division by zero");
         }
-        if (operators.pop() !== "(") throw new Error("Invalid expression");
-        expectValue = false;
-        continue;
+
+        if (operator === "*") value *= right;
+        else if (operator === "/") value /= right;
+        else value %= right;
+
+        if (!Number.isFinite(value)) throw new Error("Invalid calculation result");
       }
 
-      if (expectValue) {
-        if (token !== "-") throw new Error("Invalid expression");
-        values.push(0);
+      return value;
+    };
+
+    const parseAdditive = (): number => {
+      let value = parseMultiplicative();
+
+      while (peek() === "+" || peek() === "-") {
+        const operator = consume();
+        const right = parseMultiplicative();
+        value = operator === "+" ? value + right : value - right;
+
+        if (!Number.isFinite(value)) throw new Error("Invalid calculation result");
       }
 
-      const tokenPrecedence = precedence[token];
-      if (tokenPrecedence === undefined) throw new Error("Invalid operator");
+      return value;
+    };
 
-      while (operators.length > 0) {
-        const topOperator = operators[operators.length - 1];
-        if (topOperator === undefined || topOperator === "(") break;
+    const result = parseAdditive();
 
-        const topPrecedence = precedence[topOperator];
-        if (topPrecedence === undefined) throw new Error("Invalid operator");
-
-        if (topPrecedence < tokenPrecedence) break;
-        apply();
-      }
-
-      operators.push(token);
-      expectValue = true;
-    }
-
-    if (expectValue) throw new Error("Invalid expression");
-
-    while (operators.length > 0) {
-      if (operators[operators.length - 1] === "(") throw new Error("Invalid expression");
-      apply();
-    }
-
-    const result = values[0];
-    if (result === undefined || values.length !== 1) throw new Error("Invalid expression");
-
+    if (index !== tokens.length) throw new Error("Invalid expression");
     return { result };
   }
 };
@@ -109,7 +107,7 @@ export const calculatorTool: ToolDefinition<{ expression: string }, { result: nu
 export const timeTool: ToolDefinition<Record<string, never>, { iso: string }> = {
   name: "system.time",
   version: "1.0.0",
-  description: "Return the current server time as an ISO timestamp.",
+  description: "Return the current server time as an ISO timestamp. Use this tool only when the user explicitly asks for the current time/date or when current server time is directly relevant.",
   risk: "LOW",
   permissions: [],
   inputSchema: z.object({}),
