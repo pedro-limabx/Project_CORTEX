@@ -89,7 +89,6 @@ export class NeuronCore {
     while (steps < MAX_STEPS) {
       steps++;
       const result = await this.llm.chat(messages, {
-        temperature: 0.2,
         tools,
         toolChoice: "auto"
       });
