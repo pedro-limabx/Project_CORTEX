@@ -82,6 +82,7 @@ export class NeuronCore {
     memories: number;
     steps: number;
     toolResults: unknown[];
+    plan: ReturnType<ExecutionPlanner["snapshot"]>;
   }> {
     const requestId = crypto.randomUUID();
     const memories = await this.memory.search(userId, message, 5);
@@ -100,7 +101,8 @@ export class NeuronCore {
 
     const toolResults: unknown[] = [];
     const granted = await this.permissions.getPermissions(userId);
-    
+    const planner = new ExecutionPlanner(message);
+
     let steps = 0;
 
     while (steps < MAX_STEPS) {
@@ -215,7 +217,8 @@ export class NeuronCore {
       text: "A execução atingiu o limite de etapas e foi interrompida por segurança.",
       memories: memories.length,
       steps,
-      toolResults
+      toolResults,
+      plan: planner.snapshot()
     };
   }
 }
