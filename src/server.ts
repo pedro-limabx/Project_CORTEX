@@ -17,6 +17,7 @@ import { LocalTestProvider, OpenAICompatibleProvider } from "./llm/provider.js";
 import { NeuronCore } from "./neuron/core.js";
 import { ToolExecutor } from "./tools/executor.js";
 import { calculatorTool, timeTool } from "./tools/builtin.js";
+import { createWebSearchTool } from "./tools/web-search.js";
 import { ToolRegistry } from "./tools/registry.js";
 
 const app = Fastify({ logger: true });
@@ -69,6 +70,9 @@ if (pool) {
 const registry = new ToolRegistry();
 registry.register(calculatorTool);
 registry.register(timeTool);
+if (!config.LOCAL_TEST_MODE) {
+  registry.register(createWebSearchTool(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL));
+}
 
 const executor = new ToolExecutor(registry);
 const llm = config.LOCAL_TEST_MODE
