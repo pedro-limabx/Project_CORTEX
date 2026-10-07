@@ -173,6 +173,12 @@ export class NeuronCore {
         } satisfies ToolContext, approved);
 
         planner.complete(planStep, execution.ok, execution.error, execution.requiresApproval ?? false);
+        if (planner.shouldReplan(planStep)) {
+          messages.push({
+            role: "user",
+            content: `Planner signal: the previous step failed (${planStep.tool}). Reassess the objective and choose the next best action. Do not assume the failed action succeeded.`
+          });
+        }
         toolResults.push(execution);
         if (this.audit) {
           const auditEntry: AuditRecord = {
