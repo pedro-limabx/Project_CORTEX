@@ -158,7 +158,7 @@ export class LocalTestProvider implements LLMProvider {
   }
 }
 
-export class OpenAICompatibleProvider implements LLMProvider {
+export class OpenAICompatibleProvider {
   constructor(
     private readonly baseUrl: string,
     private readonly apiKey?: string,
@@ -176,22 +176,43 @@ export class OpenAICompatibleProvider implements LLMProvider {
       };
     }
 
-    const body: Record<string, unknown> = {
-      model: this.model,
-      messages,
-      temperature: options.temperature ?? 0.2
-    };
+    const input = messages.map(message => {
+      if (message.role === "assistant" && message.tool_calls?.length) {
+        return message.tool_calls.map(call => ({
+          type: "function_call",
+          call_id: call.id,
+          name: call.name,
+          arguments: call.arguments
+        }));
+      }
+
+      if (message.role === "tool") {
+        return {
+          type: "function_call_output",
+          call_id: message.tool_call_id,
+          output: message.content ?? ""
+        };
+      }
+
+      return { role: message.role, content: message.content ?? "" };
+    }).flat();
+
+    const body: Record<string, unknown> = { model: this.model, input };
+    const system = messages.find(message => message.role === "system")?.content;
+    if (system) body.instructions = system;
+    if (options.temperature !== undefined) body.temperature = options.temperature;
+
     if (options.tools?.length) {
-      body.tools = options.tools;
+      body.tools = options.tools.map((tool: any) => {
+        const fn = tool?.function ?? tool;
+        return { type: "function", name: fn?.name, description: fn?.description, parameters: fn?.parameters, strict: fn?.strict ?? false };
+      });
       body.tool_choice = options.toolChoice ?? "auto";
     }
 
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/responses`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify(body)
     });
 
@@ -201,27 +222,21 @@ export class OpenAICompatibleProvider implements LLMProvider {
     }
 
     const bodyJson = await response.json() as any;
-    const message = bodyJson.choices?.[0]?.message;
-    const text = typeof message?.content === "string" ? message.content : "";
-    const toolCalls: LLMToolCall[] = Array.isArray(message?.tool_calls)
-      ? message.tool_calls
-          .filter((c: any) => c?.id && c?.function?.name)
-          .map((c: any) => ({
-            id: String(c.id),
-            name: String(c.function.name),
-            arguments: typeof c.function.arguments === "string" ? c.function.arguments : JSON.stringify(c.function.arguments ?? {})
-          }))
-      : [];
+    const output = Array.isArray(bodyJson.output) ? bodyJson.output : [];
+    const toolCalls: LLMToolCall[] = output
+      .filter((item: any) => item?.type === "function_call" && item?.call_id && item?.name)
+      .map((item: any) => ({
+        id: String(item.call_id),
+        name: String(item.name),
+        arguments: typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.arguments ?? {})
+      }));
 
     return {
-      provider: "openai-compatible",
-      model: bodyJson.model,
-      text,
+      provider: "openai-responses",
+      model: bodyJson.model ?? this.model,
+      text: typeof bodyJson.output_text === "string" ? bodyJson.output_text : "",
       toolCalls,
-      usage: {
-        inputTokens: bodyJson.usage?.prompt_tokens,
-        outputTokens: bodyJson.usage?.completion_tokens
-      }
+      usage: { inputTokens: bodyJson.usage?.input_tokens, outputTokens: bodyJson.usage?.output_tokens }
     };
   }
 }
