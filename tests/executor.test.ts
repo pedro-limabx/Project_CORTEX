@@ -31,6 +31,12 @@ describe("tool executor", () => {
 });
 
 describe("calculator capabilities", () => {
+  function setup() {
+    const registry = new ToolRegistry();
+    registry.register(timeTool);
+    registry.register(calculatorTool);
+    return new ToolExecutor(registry);
+  }
   it("supports square roots, powers, and parentheses", async () => {
     const executor = setup();
 
