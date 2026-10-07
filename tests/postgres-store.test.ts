@@ -92,6 +92,39 @@ describe("PostgresMemoryStore", () => {
     expect(result[0]?.content).toBe("{\"status\":\"ACTIVE\"}");
   });
 
+  it("retrieves a task by id for the requested user", async () => {
+    const { store, query } = makeStore([{
+      id: "task-1",
+      user_id: "user-1",
+      kind: "TASK",
+      content: "{\"status\":\"ACTIVE\"}",
+      importance: "0.7",
+      created_at: "2026-09-29T10:00:00.000Z",
+      updated_at: "2026-09-29T11:00:00.000Z"
+    }]);
+
+    const result = await store.getTask("user-1", "task-1");
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]?.[0]).toContain("kind = 'TASK'");
+    expect(query.mock.calls[0]?.[0]).toContain("id = $2");
+    expect(query.mock.calls[0]?.[1]).toEqual(["user-1", "task-1"]);
+    expect(result).toMatchObject({
+      id: "task-1",
+      userId: "user-1",
+      kind: "TASK",
+      content: "{\"status\":\"ACTIVE\"}",
+      importance: 0.7
+    });
+  });
+
+  it("returns undefined when a task is not found", async () => {
+    const { store, query } = makeStore([]);
+
+    await expect(store.getTask("user-1", "missing-task")).resolves.toBeUndefined();
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
   it("does not query the database for invalid limits", async () => {
     const { store, query } = makeStore();
     await expect(store.search("user-1", "anything", 0)).resolves.toEqual([]);
