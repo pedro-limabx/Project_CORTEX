@@ -86,9 +86,16 @@ export class NeuronCore {
   }> {
     const requestId = crypto.randomUUID();
     const memories = await this.memory.search(userId, message, 5);
-    const context = memories.length
-      ? `Relevant memory:\n${memories.map(m => `- [${m.kind}] ${m.content}`).join("\n")}`
-      : "No relevant memory found.";
+    const previousTasks = await this.memory.listTasks(userId, 3);
+    const contextParts = [
+      memories.length
+        ? `Relevant memory:\n${memories.map(m => `- [${m.kind}] ${m.content}`).join("\n")}`
+        : "No relevant memory found.",
+      previousTasks.length
+        ? `Recent execution plans:\n${previousTasks.map(task => `- ${task.content}`).join("\n")}`
+        : "No previous execution plans found."
+    ];
+    const context = contextParts.join("\n\n");
 
     const tools = this.registry.list().map(toOpenAITool);
     const messages: LLMMessage[] = [
