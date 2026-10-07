@@ -18,27 +18,12 @@ describe("OpenAICompatibleProvider", () => {
     });
   });
 
-  it("sends chat completions with tools and maps the model response", async () => {
+  it("uses the Responses API and maps function calls and tool output", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      model: "test-model",
-      choices: [{
-        message: {
-          role: "assistant",
-          content: "Vou calcular.",
-          tool_calls: [{
-            id: "call-1",
-            type: "function",
-            function: {
-              name: "calculator.evaluate",
-              arguments: JSON.stringify({ expression: "25*18" })
-            }
-          }]
-        }
-      }],
-      usage: {
-        prompt_tokens: 21,
-        completion_tokens: 8
-      }
+      model: "gpt-6-luna",
+      output: [{ type: "function_call", call_id: "call-1", name: "calculator.evaluate", arguments: JSON.stringify({ expression: "25*18" }) }],
+      output_text: "",
+      usage: { input_tokens: 21, output_tokens: 8 }
     }), {
       status: 200,
       headers: { "Content-Type": "application/json" }
