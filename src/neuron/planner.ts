@@ -83,6 +83,15 @@ export class ExecutionPlanner {
     this.currentStep = undefined;
   }
 
+  restore(plan: ExecutionPlan): void {
+    if (plan.objective !== this.objective) throw new Error("Planner objective mismatch");
+    this.steps.length = 0;
+    this.steps.push(...plan.steps.map(step => ({ ...step })));
+    this.status = plan.status;
+    this.currentStep = plan.currentStep;
+    this.revision = plan.revision;
+  }
+
   getObjective(): string {
     return this.objective;
   }
