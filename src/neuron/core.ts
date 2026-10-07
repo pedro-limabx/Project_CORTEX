@@ -19,6 +19,10 @@ Do not invent tool results, permissions, or completed actions.
 When a tool requires approval, explain that approval is pending and do not claim success.
 `.trim();
 
+function modelToolName(toolName: string): string {
+  return toolName.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
 function toOpenAITool(tool: ReturnType<ToolRegistry["list"]>[number]) {
   const schema = tool.inputSchema as { toJSONSchema?: () => unknown };
   const parameters = typeof schema?.toJSONSchema === "function"
@@ -28,7 +32,7 @@ function toOpenAITool(tool: ReturnType<ToolRegistry["list"]>[number]) {
   return {
     type: "function",
     function: {
-      name: tool.name,
+      name: modelToolName(tool.name),
       description: tool.description,
       parameters
     }
@@ -126,7 +130,10 @@ export class NeuronCore {
           continue;
         }
 
-        const toolDefinition = this.registry.get(call.name);
+        const canonicalToolName = this.registry.get(call.name)
+          ? call.name
+          : this.registry.list().find(tool => modelToolName(tool.name) === call.name)?.name;
+        const toolDefinition = canonicalToolName ? this.registry.get(canonicalToolName) : undefined;
         const hasPermissions = toolDefinition
           ? toolDefinition.permissions.every(permission => granted.has(permission))
           : false;
@@ -136,9 +143,10 @@ export class NeuronCore {
           && toolDefinition.risk !== "LOW"
           && hasPermissions
           && options.approvalId
-          && await this.approvals.consume(options.approvalId, userId, call.name, input)
+          && canonicalToolName
+          && await this.approvals.consume(options.approvalId, userId, canonicalToolName, input)
         );
-        const execution = await this.executor.execute(call.name, input, {
+        const execution = await this.executor.execute(canonicalToolName ?? call.name, input, {
           userId,
           requestId,
           dryRun: options.dryRun ?? false,
@@ -151,7 +159,7 @@ export class NeuronCore {
             id: crypto.randomUUID(),
             userId,
             requestId,
-            tool: call.name,
+            tool: canonicalToolName ?? call.name,
             ok: execution.ok,
             requiresApproval: execution.requiresApproval ?? false,
             ...(execution.error ? { error: execution.error.slice(0, 1000) } : {}),
@@ -167,8 +175,8 @@ export class NeuronCore {
         });
 
         if (execution.requiresApproval) {
-          const request = toolDefinition
-            ? await this.approvals.request(userId, call.name, input, toolDefinition.risk)
+          const request = toolDefinition && canonicalToolName
+            ? await this.approvals.request(userId, canonicalToolName, input, toolDefinition.risk)
             : undefined;
           if (request) execution.approvalId = request.id;
           await this.memory.save({
