@@ -11,6 +11,11 @@ export class InMemoryStore implements MemoryStore {
   private readonly records: MemoryRecord[] = [];
 
   async save(record: MemoryRecord): Promise<void> {
+    const existingIndex = this.records.findIndex(existing => existing.id === record.id);
+    if (existingIndex >= 0) {
+      this.records[existingIndex] = record;
+      return;
+    }
     this.records.push(record);
   }
 
