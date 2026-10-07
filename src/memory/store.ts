@@ -3,6 +3,7 @@ import type { MemoryRecord } from "../domain/types.js";
 export interface MemoryStore {
   save(record: MemoryRecord): Promise<void>;
   search(userId: string, query: string, limit: number): Promise<MemoryRecord[]>;
+  listTasks(userId: string, limit: number): Promise<MemoryRecord[]>;
 }
 
 export class InMemoryStore implements MemoryStore {
@@ -17,6 +18,14 @@ export class InMemoryStore implements MemoryStore {
     return this.records
       .filter(r => r.userId === userId && r.content.toLowerCase().includes(q))
       .sort((a, b) => b.importance - a.importance)
+      .slice(0, limit);
+  }
+
+  async listTasks(userId: string, limit: number): Promise<MemoryRecord[]> {
+    if (!Number.isInteger(limit) || limit <= 0) return [];
+    return this.records
+      .filter(r => r.userId === userId && r.kind === "TASK")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, limit);
   }
 }
