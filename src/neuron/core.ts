@@ -200,12 +200,6 @@ export class NeuronCore {
           content: JSON.stringify(execution)
         });
 
-        if (!execution.requiresApproval && execution.ok) {
-          planner.markCompleted();
-        } else if (!execution.requiresApproval && !execution.ok && !planner.shouldReplan(planStep)) {
-          planner.markFailed();
-        }
-
         if (execution.requiresApproval) {
           const request = toolDefinition && canonicalToolName
             ? await this.approvals.request(userId, canonicalToolName, input, toolDefinition.risk)
