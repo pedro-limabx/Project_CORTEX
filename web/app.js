@@ -273,6 +273,22 @@ const presets = {
 function resetExample() {
   $("#workflow-json").value = fmt(presets[$("#preset").value]);
 }
+$("#propose-workflow").addEventListener("click", event => action(async () => {
+  const objective = $("#workflow-objective").value.trim();
+  if (!objective) throw new Error("Descreva primeiro o processo que o NEURON deve planejar.");
+  const proposal = await api("/api/workflows/propose", {
+    method: "POST",
+    body: { objective }
+  });
+  $("#workflow-json").value = fmt(proposal.definition);
+  const feedback = [
+    proposal.message,
+    "Este é somente um rascunho: nada foi criado ou executado.",
+    ...(proposal.warnings || [])
+  ].filter(Boolean).join(" ");
+  $("#proposal-feedback").textContent = feedback;
+  showNotice("Proposta validada e colocada no editor. Revise e clique em Criar workflow somente se concordar.", "success");
+}, event.currentTarget));
 $("#preset").addEventListener("change", resetExample);
 $("#reset-example").addEventListener("click", resetExample);
 $("#create-workflow").addEventListener("click", event => action(async () => {
