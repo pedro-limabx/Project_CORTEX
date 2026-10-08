@@ -150,6 +150,56 @@ describe("Persisted task lifecycle", () => {
       .rejects.toThrow("Task not found");
   });
 
+
+  it("does not execute an already successful tool again after a model interruption", async () => {
+    const memory = new InMemoryStore();
+    const registry = new ToolRegistry();
+    const approvals = new ApprovalEngine(new InMemoryApprovalStore());
+    let executed = 0;
+    registry.register({
+      name: "test.once",
+      version: "1.0.0",
+      description: "An operation that must not run twice",
+      risk: "LOW",
+      permissions: [],
+      inputSchema: z.object({}),
+      async execute() {
+        executed++;
+        return { success: true };
+      }
+    });
+    let firstCalls = 0;
+    const crashingProvider: LLMProvider = {
+      async chat() {
+        if (++firstCalls === 1) return toolCall("test.once");
+        throw new Error("simulated model interruption");
+      }
+    };
+    await expect(makeCore(crashingProvider, memory, registry, approvals)
+      .respond("user-1", "Execute uma vez.")).rejects.toThrow("simulated model interruption");
+    expect(executed).toBe(1);
+    const task = (await memory.listTasks("user-1", 10))[0];
+    expect(parseTaskPlan(task?.content ?? "").steps[0]?.status).toBe("COMPLETED");
+
+    let resumedCalls = 0;
+    const resumeProvider: LLMProvider = {
+      async chat() {
+        return ++resumedCalls === 1
+          ? toolCall("test.once", "repeat-1")
+          : { provider: "test", text: "Recuperação finalizada." };
+      }
+    };
+    const result = await makeCore(resumeProvider, memory, registry, approvals)
+      .respond("user-1", "continue", { resumeTaskId: task?.id });
+    expect(result.plan.status).toBe("COMPLETED");
+    expect(result.plan.steps).toHaveLength(1);
+    expect(result.toolResults[0]).toMatchObject({
+      tool: "test.once",
+      output: { skipped: true }
+    });
+    expect(executed).toBe(1);
+  });
+
   it("rejects damaged task records rather than leaking them into the API", () => {
     expect(() => parseTaskPlan('{"status":"ACTIVE"}')).toThrow("Persisted task is invalid");
     expect(() => parseTaskPlan('{"objective":"x","status":"ACTIVE","revision":1,"steps":[{"index":7,"tool":"bad","status":"PLANNED"}]}'))
