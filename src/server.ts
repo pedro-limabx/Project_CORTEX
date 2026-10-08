@@ -15,7 +15,7 @@ import { InMemoryApprovalStore } from "./approval/store.js";
 import { PostgresApprovalStore } from "./approval/postgres-store.js";
 import { LocalTestProvider, OpenAICompatibleProvider } from "./llm/provider.js";
 import { NeuronCore } from "./neuron/core.js";
-import { taskToResponse } from "./neuron/task.js";
+import { parseTaskPlan, reconcileInterruptedPlan, taskToResponse } from "./neuron/task.js";
 import { ToolExecutor } from "./tools/executor.js";
 import { calculatorTool, timeTool } from "./tools/builtin.js";
 import { createWebSearchTool } from "./tools/web-search.js";
@@ -138,6 +138,34 @@ app.get("/api/tasks/:id", { preHandler: authenticate }, async (request, reply) =
     return taskToResponse(record);
   } catch {
     return reply.code(422).send({ error: "Persisted task is invalid" });
+  }
+});
+
+// This is an operator acknowledgement, never an automatic retry of a potentially executed tool.
+app.post("/api/tasks/:id/reconcile", { preHandler: authenticate }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const body = request.body && typeof request.body === "object"
+    ? request.body as { outcome?: unknown; confirmed?: unknown }
+    : {};
+  if (body.confirmed !== true || (body.outcome !== "completed" && body.outcome !== "failed")) {
+    return reply.code(400).send({
+      error: "confirmed=true and an independently verified outcome (completed or failed) are required"
+    });
+  }
+  const record = await memory.getTask(config.CORTEX_USER_ID, id);
+  if (!record) return reply.code(404).send({ error: "task not found" });
+  try {
+    const plan = reconcileInterruptedPlan(parseTaskPlan(record.content), body.outcome);
+    const saved = {
+      ...record,
+      content: JSON.stringify(plan),
+      updatedAt: new Date().toISOString()
+    };
+    await memory.save(saved);
+    return taskToResponse(saved);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Invalid task state";
+    return reply.code(reason === "Persisted task is invalid" ? 422 : 409).send({ error: reason });
   }
 });
 
