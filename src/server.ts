@@ -20,6 +20,9 @@ import { ToolExecutor } from "./tools/executor.js";
 import { calculatorTool, timeTool } from "./tools/builtin.js";
 import { createWebSearchTool } from "./tools/web-search.js";
 import { ToolRegistry } from "./tools/registry.js";
+import { WorkflowEngine } from "./workflows/engine.js";
+import { InMemoryWorkflowStore, PostgresWorkflowStore, type WorkflowStore } from "./workflows/store.js";
+import { WorkflowConflictError, WorkflowInputError, WorkflowNotFoundError } from "./workflows/types.js";
 
 const app = Fastify({ logger: true });
 
@@ -47,6 +50,7 @@ let memory: MemoryStore;
 let permissions: PermissionEngine;
 let approvals: ApprovalEngine;
 let audit: AuditStore = new InMemoryAuditStore();
+let workflowStore: WorkflowStore;
 if (pool) {
   const postgresMemory = new PostgresMemoryStore(pool);
   await postgresMemory.initialize();
@@ -60,9 +64,13 @@ if (pool) {
   await postgresAudit.initialize();
   audit = postgresAudit;
   memory = postgresMemory;
+  const postgresWorkflows = new PostgresWorkflowStore(pool);
+  await postgresWorkflows.initialize();
+  workflowStore = postgresWorkflows;
   app.log.info("Persistent PostgreSQL memory and audit enabled");
 } else {
   memory = new InMemoryStore();
+  workflowStore = new InMemoryWorkflowStore();
   permissions = new PermissionEngine(new InMemoryPermissionStore());
   approvals = new ApprovalEngine(new InMemoryApprovalStore());
   app.log.warn("DATABASE_URL is not set; using in-memory memory, permissions and audit stores");
@@ -80,6 +88,7 @@ const llm = config.LOCAL_TEST_MODE
   ? new LocalTestProvider()
   : new OpenAICompatibleProvider(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL);
 const neuron = new NeuronCore(llm, memory, registry, executor, permissions, approvals, audit);
+const workflows = new WorkflowEngine(workflowStore, registry, executor, permissions, approvals, audit);
 
 app.get("/health", async () => ({
   ok: true,
@@ -201,6 +210,75 @@ app.post("/api/tasks/:id/resume", { preHandler: authenticate }, async (request, 
       return reply.code(400).send({ error: reason });
     }
     throw error;
+  }
+});
+
+function workflowError(reply: FastifyReply, error: unknown): FastifyReply {
+  if (error instanceof WorkflowInputError) return reply.code(400).send({ error: error.message });
+  if (error instanceof WorkflowNotFoundError) return reply.code(404).send({ error: error.message });
+  if (error instanceof WorkflowConflictError) return reply.code(409).send({ error: error.message });
+  throw error;
+}
+
+app.post("/api/workflows", { preHandler: authenticate }, async (request, reply) => {
+  try {
+    const workflow = await workflows.create(config.CORTEX_USER_ID, request.body);
+    return reply.code(201).send(workflow);
+  } catch (error) {
+    return workflowError(reply, error);
+  }
+});
+
+app.get("/api/workflows", { preHandler: authenticate }, async (request, reply) => {
+  const query = request.query as { limit?: string };
+  const limit = query.limit === undefined ? 20 : Number(query.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return reply.code(400).send({ error: "limit must be an integer from 1 to 100" });
+  }
+  return { workflows: await workflows.list(config.CORTEX_USER_ID, limit) };
+});
+
+app.get("/api/workflows/:id", { preHandler: authenticate }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  try {
+    return await workflows.get(config.CORTEX_USER_ID, id);
+  } catch (error) {
+    return workflowError(reply, error);
+  }
+});
+
+app.post("/api/workflows/:id/advance", { preHandler: authenticate }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const body = request.body && typeof request.body === "object"
+    ? request.body as { approvalId?: unknown }
+    : {};
+  if (body.approvalId !== undefined && typeof body.approvalId !== "string") {
+    return reply.code(400).send({ error: "approvalId must be a string" });
+  }
+  try {
+    return await workflows.advance(
+      config.CORTEX_USER_ID,
+      id,
+      typeof body.approvalId === "string" ? body.approvalId : undefined
+    );
+  } catch (error) {
+    return workflowError(reply, error);
+  }
+});
+
+app.post("/api/workflows/:id/reconcile", { preHandler: authenticate }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const body = request.body && typeof request.body === "object"
+    ? request.body as { stepId?: unknown; outcome?: unknown; confirmed?: unknown }
+    : {};
+  if (body.confirmed !== true || typeof body.stepId !== "string"
+      || (body.outcome !== "completed" && body.outcome !== "failed")) {
+    return reply.code(400).send({ error: "stepId, confirmed=true and verified outcome (completed/failed) are required" });
+  }
+  try {
+    return await workflows.reconcile(config.CORTEX_USER_ID, id, body.stepId, body.outcome);
+  } catch (error) {
+    return workflowError(reply, error);
   }
 });
 
