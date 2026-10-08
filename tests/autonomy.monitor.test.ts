@@ -74,7 +74,7 @@ function provider(alerts: ReturnType<typeof makeAlert>[]) {
     }))
   } as unknown as Pick<OperationalAlertService,"inbox">;
 }
-describe("CORTEX V10 autonomous monitoring", () => {
+describe("CORTEX V10/V11 autonomous monitoring", () => {
   it("rejects unsafe configurations and unknown parameters", () => {
     expect(validateMonitorSettings({enabled:true,intervalSeconds:60,cooldownSeconds:600}))
       .toEqual({enabled:true,intervalSeconds:60,cooldownSeconds:600});
@@ -118,6 +118,22 @@ describe("CORTEX V10 autonomous monitoring", () => {
     expect((await store.list("owner","all",100)).notifications).toHaveLength(2);
     expect((await store.list("other","all",100)).notifications).toHaveLength(2);
     expect(await store.read("other","owner-1",store.now())).toBe(false);
+  });
+  it("manual checks require opt-in and respect persisted rate limits", async () => {
+    const store = new MemoryMonitorRepository();
+    let time = Date.parse(store.now());
+    const source = provider([makeAlert(1)]);
+    const monitor = new AutonomousMonitoringService(store,source,"owner",
+      new InAppNotificationChannel(store),()=>new Date(time));
+    expect(await monitor.checkDue(true)).toEqual({ran:false,reason:"disabled"});
+    await store.configure("owner",true,3600,600);
+    expect((await monitor.checkDue()).ran).toBe(true);
+    expect(await monitor.checkDue(true)).toEqual({ran:false,reason:"rate_limited"});
+    time += 31_000;
+    expect(await monitor.checkDue()).toEqual({ran:false,reason:"not_due"});
+    expect((await monitor.checkDue(true)).ran).toBe(true);
+    expect(source.inbox).toHaveBeenCalledTimes(2);
+    expect(store.notices).toHaveLength(1);
   });
   it("records failed scans without persisting exception payloads", async () => {
     const store = new MemoryMonitorRepository();

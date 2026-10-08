@@ -562,7 +562,7 @@ $("#alerts-browser-toggle").addEventListener("click", event => action(async () =
 updateAlertWatchControls();
 
 
-// CORTEX V10: persistent inbox and explicitly configured server monitor.
+// CORTEX V11: persistent inbox, diagnostics, and safe manual monitoring.
 // Browser remains a presentation client; never schedules backend checks.
 async function loadAlertCenter() {
   await Promise.all([loadAlerts(), loadBackendCenter()]);
@@ -587,6 +587,13 @@ function showBackendStatus(settings) {
       + " · Próxima: " + dateTime(settings.nextCheckAt)
       + " · Resultado: " + (settings.lastCheckOk === null ? "sem histórico" : settings.lastCheckOk ? "OK" : "falhou")
     : "Desativado no servidor · Configuração preservada no PostgreSQL.";
+}
+function renderBackendHealth(health) {
+  const labels = { disabled:"Desativado", starting:"Aguardando primeira verificação",
+    healthy:"Funcionando", degraded:"Falha na última verificação", overdue:"Verificação atrasada" };
+  $("#backend-monitor-health").textContent = "Diagnóstico: " + (labels[health.status] || "Indisponível")
+    + " · Não lidas: " + health.unreadNotifications
+    + (health.overdueSeconds > 30 ? " · Atraso: " + health.overdueSeconds + " s" : "");
 }
 function renderPersistentNotices(data) {
   $("#backend-notice-count").textContent = String(data.unread);
@@ -645,20 +652,25 @@ async function loadBackendCenter() {
     $("#backend-monitor-status").textContent =
       "Indisponível: configure DATABASE_URL e reinicie o servidor para habilitar a V10.";
     $("#backend-monitor-save").disabled = true;
+    $("#backend-monitor-check").disabled = true;
+    $("#backend-monitor-health").textContent = "Diagnóstico indisponível sem PostgreSQL.";
     clear($("#backend-notice-list")).append(info("PostgreSQL não está configurado."));
     clear($("#backend-events-list"));
     $("#backend-notice-count").textContent = "—";
     return;
   }
   $("#backend-monitor-save").disabled = false;
+  $("#backend-monitor-check").disabled = !result.settings.enabled;
   showBackendStatus(result.settings);
   const view = $("#backend-notice-view").value;
-  const [notices, history] = await Promise.all([
+  const [notices, history, health] = await Promise.all([
     api("/api/notifications?view=" + encodeURIComponent(view) + "&limit=50"),
-    api("/api/monitoring/backend/events?limit=12")
+    api("/api/monitoring/backend/events?limit=12"),
+    api("/api/monitoring/backend/health")
   ]);
   renderPersistentNotices(notices);
   renderBackendEvents(history.events || []);
+  renderBackendHealth(health);
 }
 $("#backend-monitor-save").addEventListener("click", event => action(async () => {
   const config = {
@@ -669,6 +681,16 @@ $("#backend-monitor-save").addEventListener("click", event => action(async () =>
   await api("/api/monitoring/backend", { method: "PUT", body: config });
   await loadBackendCenter();
   showNotice("Configuração persistida no servidor. Nenhuma ferramenta foi executada.", "success");
+}, event.currentTarget));
+$("#backend-monitor-check").addEventListener("click", event => action(async () => {
+  const result = await api("/api/monitoring/backend/check", {method:"POST",body:{confirmed:true}});
+  await loadBackendCenter();
+  const reasons = {disabled:"monitor desativado",rate_limited:"aguarde 30 segundos da última verificação",
+    locked:"outra instância está verificando",not_due:"ainda não chegou o intervalo"};
+  showNotice(result.ran
+    ? "Verificação concluída: " + result.sampled + " workflows analisados, " + result.created + " notificações criadas."
+    : "Verificação não realizada: " + (reasons[result.reason] || "indisponível") + ".",
+    result.ran ? "success" : undefined);
 }, event.currentTarget));
 $("#backend-notice-refresh").addEventListener("click", event =>
   action(loadBackendCenter, event.currentTarget));

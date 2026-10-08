@@ -269,3 +269,7 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 .notification-counter { font-size:12px;color:#f8c98b;margin-left:6px }
 .backend-center #backend-events-list { max-height:260px }
 @media(max-width:650px) { .backend-config { align-items:stretch;flex-direction:column } .backend-config>.field-label { width:100% } }
+
+/* V11: operational health next to a read-only manual scan action. */
+.backend-health-row { display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:12px }
+.backend-health-row p { margin:0;flex:1;min-width:210px }

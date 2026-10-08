@@ -34,7 +34,11 @@ jobs:
         with:
           node-version: "24"
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --no-fund
+      - name: Audit all dependencies
+        run: npm audit --audit-level=moderate
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
       - name: Typecheck
         run: npm run typecheck
       - name: Tests (with PostgreSQL)
