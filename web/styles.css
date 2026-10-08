@@ -125,6 +125,9 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 .status.completed,.status.ok { background:#143a31;color:#80e3b9;border-color:#245e4c }
 .status.skipped { background:#29303b;color:#b8c2cf;border-color:#495365 }
 .status.failed,.status.error { background:#3b222b;color:#f2a1a9;border-color:#75424f }
+.status.recovery_required { background:#472d2e;color:#ffbbab;border-color:#89534a }
+.status.recovering { background:#26374a;color:#b6d7ff;border-color:#536c87 }
+.status.completed_with_failures { background:#293c35;color:#b5dfb8;border-color:#576e61 }
 .status.waiting_approval,.status.awaiting_approval,.status.needs_reconciliation,.status.replanning { background:#372f20;color:#f5d18b;border-color:#655333 }
 .status.running,.status.active,.status.planned { background:#18324b;color:#8ccaf7;border-color:#265479 }
 .progressbar { display:block;width:100%;appearance:none;height:7px;background:#223445;overflow:hidden;border:0;border-radius:99px;margin:12px 0 8px }
