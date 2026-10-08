@@ -11,7 +11,6 @@ import {
  * Only direct dependencies can be referenced. A template never reads other
  * workflows, environment variables or arbitrary object properties.
  */
-const REF = /^\{\{steps\.([a-zA-Z][a-zA-Z0-9_-]{0,63})\.([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){0,7})\}\}$/;
 const REFS = /\{\{steps\.([a-zA-Z][a-zA-Z0-9_-]{0,63})\.([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){0,7})\}\}/g;
 const FORBIDDEN = new Set(["__proto__", "prototype", "constructor"]);
 const MAX_DEPTH = 12;
