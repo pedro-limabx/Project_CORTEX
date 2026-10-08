@@ -287,8 +287,9 @@ etapa** executa no máximo um passo, respeitando as aprovações de risco.
   ao modelo um grafo em JSON sem fornecer chamadas de ferramenta.
 - O CORTEX verifica ferramentas existentes, schemas de entrada,
   identificadores e dependências; planos inválidos são recusados.
-- A versão atual **não oferece substituição dinâmica de resultados entre
-  passos**: cada entrada precisa estar definida antes da execução.
+- A versão atual permite referências explícitas a saídas de etapas já
+  concluídas, desde que exista uma dependência direta. Valores são resolvidos e
+  validados **antes** de qualquer solicitação de aprovação ou execução.
 - Rascunhos gerados não substituem a revisão humana. Operações de
   alto risco continuam bloqueadas pelas políticas de permissão/aprovação.
 
@@ -331,3 +332,67 @@ determinística do CORTEX, tanto no modo local quanto com LLM externo.
 Solicitações de criação/execução não são reinterpretadas como consultas.
 Isto não é um monitoramento contínuo em segundo plano nem um sistema
 de alertas proativos; o resumo é atualizado quando o usuário consulta.
+
+
+### Orquestração v3 — Resultados entre etapas
+
+Um workflow agora pode usar o resultado produzido por uma etapa anterior
+na entrada de outra ferramenta. Essa integração suporta **duas formas**:
+
+1. **Referência tipada:** `{ "$fromStep": "primeiro", "path": "result" }`
+   usa exatamente o valor JSON recebido (`number`, `string`, objeto etc.).
+2. **Interpolação em texto:** `{{steps.primeiro.result}}/3`
+   substitui valores escalares em strings, preservando o restante do texto.
+
+Exemplo completo com a calculadora:
+
+```json
+{
+  "objective": "Calcular 25 vezes 18 e dividir o resultado por 3",
+  "steps": [
+    {
+      "id": "primeiro",
+      "tool": "calculator.evaluate",
+      "input": { "expression": "25*18" }
+    },
+    {
+      "id": "segundo",
+      "tool": "calculator.evaluate",
+      "input": { "expression": "{{steps.primeiro.result}}/3" },
+      "dependsOn": ["primeiro"]
+    }
+  ]
+}
+```
+
+A primeira etapa produz `{ "result": 450 }`. Após um novo comando manual
+de avanço, o CORTEX resolve a expressão da segunda etapa para `450/3`
+e a calculadora retorna `{ "result": 150 }`.
+
+Para testar sem copiar JSON, abra **/console → Workflows v2 → Modelo inicial**
+e use **Encadeamento real**. Clique em **Criar workflow** e depois
+em **Avançar etapa** uma vez para cada cálculo. O painel mostra
+`input` (definição original), `resolvedInput` (entrada efetiva usada)
+e `output` (resultado armazenado). No modo local, também é possível escrever
+**"Calcule 25*18 e depois divida o resultado por 3"** no gerador de propostas.
+
+**Regras de segurança e limites da v3:**
+
+- Toda referência deve apontar para uma **dependência direta** declarada
+  em `dependsOn`; ciclos e nomes de etapas inexistentes continuam proibidos.
+- A etapa referenciada precisa estar `COMPLETED` e possuir a propriedade
+  solicitada no resultado persistido. Valores ausentes não são inventados.
+- Parâmetros resolvidos passam novamente pelo schema da ferramenta antes de
+  executar. Tipos incompatíveis falham sem acionar a ferramenta.
+- Entradas aprovadas e executadas utilizam o **mesmo JSON resolvido**.
+  O valor é preservado em `resolvedInput` para auditoria operacional.
+- A entrada do workflow é limitada por tamanho e profundidade; caminhos
+  potencialmente perigosos, como `__proto__`, são rejeitados.
+- Saídas de passos anteriores só são interpoladas em texto se forem escalares.
+  Referências tipadas permitem objetos e números conforme o schema aceitar.
+- **Reconciliação manual não gera valores de saída automaticamente.**
+  Se uma etapa foi marcada como concluída após uma interrupção, mas não
+  existe resultado persistido, dependências que precisam desse resultado
+  falham de maneira segura.
+- Não existe execução automática em lote, passagem de saídas entre workflows
+  distintos, nem garantia transacional de efeitos externos exatamente uma vez.
