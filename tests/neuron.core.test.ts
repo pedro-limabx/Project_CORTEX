@@ -370,7 +370,7 @@ describe("NEURON persisted task resume", () => {
     });
 
     expect(resumed.plan.objective).toBe("Calcule 10 + 5.");
-    expect(resumed.plan.status).toBe("REPLANNING");
+    expect(resumed.plan.status).toBe("ACTIVE");
     expect(resumed.plan.steps).toHaveLength(2);
     expect(resumed.plan.steps[0]).toMatchObject({
       index: 1,
