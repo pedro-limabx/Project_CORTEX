@@ -111,6 +111,36 @@ describe("CORTEX read-only workflow reporting", () => {
     expect(after.text).toContain("Todas as etapas foram concluídas");
   });
 
+  it("reports confirmed failures awaiting recovery without claiming execution succeeded", async () => {
+    const store = new InMemoryWorkflowStore();
+    const failedRun = workflow(ids.failed, "FAILED");
+    failedRun.steps.push({
+      id: "fallback",
+      tool: "calculator.evaluate",
+      input: { expression: "10+5" },
+      dependsOn: ["step-1"],
+      onFailureOf: "step-1",
+      status: "PENDING"
+    });
+    await store.create(failedRun);
+    const reporter = new WorkflowReporter(store, () => NOW);
+    const before = await reporter.summarize("user-a", { id: ids.failed });
+    expect(before.workflows[0]).toMatchObject({
+      status: "RECOVERY_REQUIRED", completed: 0, skipped: 0, failed: 1
+    });
+    expect(before.text).toContain("autorização humana");
+    expect(before.text).not.toContain("Todas as etapas foram concluídas");
+
+    const next = structuredClone(failedRun);
+    next.version = 2;
+    next.recoveries = [{ stepId: "step-1", note: "Verifiquei a falha e seus efeitos externos",
+      authorizedAt: new Date(NOW).toISOString() }];
+    expect(await store.update("user-a", 1, next)).toBe(true);
+    const approved = await reporter.summarize("user-a", { id: ids.failed });
+    expect(approved.workflows[0]?.status).toBe("RECOVERING");
+    expect(approved.text).toContain("Avance manualmente");
+  });
+
   it("never reveals another user's workflows and handles unknown IDs", async () => {
     const store = new InMemoryWorkflowStore();
     await store.create(workflow(ids.active, "PENDING", "user-a"));
