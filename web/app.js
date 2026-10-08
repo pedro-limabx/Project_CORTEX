@@ -23,6 +23,7 @@ const statusLabels = {
   COMPLETED: "Concluído",
   FAILED: "Falhou",
   PENDING: "Pendente",
+  SKIPPED: "Ignorada",
   RUNNING: "Executando",
   PLANNED: "Planejado"
 };
@@ -280,8 +281,8 @@ function renderChatInspection(result) {
         const box = node("div", "workflow-step");
         const top = node("div", "workflow-step-top");
         top.append(node("strong", "", item.objective), statusPill(item.status));
-        box.append(top, node("p", "", item.completed + "/" + item.total
-          + " etapas · " + item.percent + "% concluído"));
+        box.append(top, node("p", "", item.completed + " executadas · "
+          + (item.skipped || 0) + " ignoradas · " + item.percent + "% resolvido"));
         box.append(node("p", "", item.attention));
         box.append(node("p", "row-meta", "ID: " + item.id));
         target.append(box);
@@ -352,6 +353,30 @@ const presets = {
       { id: "c", tool: "calculator.evaluate", input: { expression: "{{steps.a.result}}+{{steps.b.result}}" }, dependsOn: ["a", "b"] }
     ]
   },
+  conditional: {
+    objective: "Conceder desconto conforme resultado de uma medição",
+    steps: [
+      { id: "medicao", tool: "calculator.evaluate", input: { expression: "25*18" } },
+      {
+        id: "desconto-maior", tool: "calculator.evaluate",
+        input: { expression: "{{steps.medicao.result}}*0.90" },
+        dependsOn: ["medicao"],
+        when: { step: "medicao", path: "result", operator: "gte", value: 400 }
+      },
+      {
+        id: "desconto-menor", tool: "calculator.evaluate",
+        input: { expression: "{{steps.medicao.result}}*0.95" },
+        dependsOn: ["medicao"],
+        when: { step: "medicao", path: "result", operator: "lt", value: 400 }
+      },
+      {
+        id: "conclusao", tool: "calculator.evaluate",
+        input: { expression: "{{steps.medicao.result}}/3" },
+        dependsOn: ["medicao", "desconto-maior", "desconto-menor"],
+        dependsMode: "settled"
+      }
+    ]
+  },
   invalid: {
     objective: "Testar validação de dependências cíclicas",
     steps: [
@@ -400,7 +425,10 @@ function renderWorkflowList() {
     button.type = "button";
     const top = node("div", "row-head");
     top.append(node("strong", "", workflow.objective), statusPill(workflow.status));
-    button.append(top, node("div", "row-meta", dateTime(workflow.updatedAt) + " · " + workflow.progress.completed + "/" + workflow.progress.total + " etapas"));
+    button.append(top, node("div", "row-meta",
+      dateTime(workflow.updatedAt) + " · " + workflow.progress.completed + " executadas"
+      + (workflow.progress.skipped ? " · " + workflow.progress.skipped + " ignoradas" : "")
+      + " · " + workflow.progress.percent + "% resolvido"));
     button.addEventListener("click", () => action(async () => {
       state.workflowId = workflow.id;
       renderWorkflowList();
@@ -415,6 +443,14 @@ function stepView(step) {
   top.append(node("strong", "", step.id + " · " + step.tool), statusPill(step.status));
   item.append(top);
   if (step.dependsOn && step.dependsOn.length) item.append(node("p", "", "Depende de: " + step.dependsOn.join(", ")));
+  if (step.dependsMode === "settled") item.append(node("p", "", "Juntada: aguarda os caminhos terminarem ou serem ignorados."));
+  if (step.when) {
+    const operators = { eq: "=", neq: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤" };
+    item.append(node("p", "", "Condição: " + step.when.step + "." + step.when.path
+      + " " + (operators[step.when.operator] || step.when.operator)
+      + " " + JSON.stringify(step.when.value)));
+  }
+  if (step.skipReason) item.append(node("p", "", "Não executada: " + step.skipReason));
   if (step.input !== undefined) {
     item.append(node("p", "", "Entrada original:"), prettyBlock(step.input));
   }
@@ -439,7 +475,10 @@ function renderWorkflowDetail(workflow) {
   bar.max = 100;
   bar.value = workflow.progress.percent;
   bar.setAttribute("aria-label", "Progresso do workflow");
-  target.append(bar, node("div", "progress-caption", workflow.progress.completed + "/" + workflow.progress.total + " etapas · " + workflow.progress.percent + "%"));
+  target.append(bar, node("div", "progress-caption",
+    workflow.progress.completed + " executadas · "
+    + (workflow.progress.skipped || 0) + " ignoradas · "
+    + workflow.progress.percent + "% resolvido"));
   target.append(node("p", "row-meta", "ID: " + workflow.id));
 
   const buttons = node("div", "actions");
