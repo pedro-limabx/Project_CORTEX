@@ -16,7 +16,8 @@ const stepSchema = z.object({
   input: z.unknown().default({}),
   dependsOn: z.array(z.string()).max(32).default([]),
   dependsMode: z.enum(["all", "settled"]).optional(),
-  when: conditionSchema.optional()
+  when: conditionSchema.optional(),
+  onFailureOf: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/).optional()
 }).strict();
 
 const workflowSchema = z.object({
@@ -26,7 +27,16 @@ const workflowSchema = z.object({
 
 export type WorkflowDefinition = z.infer<typeof workflowSchema>;
 export type WorkflowStepStatus = "PENDING" | "RUNNING" | "WAITING_APPROVAL" | "COMPLETED" | "SKIPPED" | "FAILED";
-export type WorkflowStatus = "ACTIVE" | "AWAITING_APPROVAL" | "NEEDS_RECONCILIATION" | "COMPLETED" | "FAILED";
+export type WorkflowStatus =
+  | "ACTIVE" | "AWAITING_APPROVAL" | "NEEDS_RECONCILIATION"
+  | "RECOVERY_REQUIRED" | "RECOVERING" | "COMPLETED_WITH_FAILURES"
+  | "COMPLETED" | "FAILED";
+
+export interface WorkflowRecoveryAuthorization {
+  stepId: string;
+  authorizedAt: string;
+  note: string;
+}
 
 export interface WorkflowStep {
   id: string;
@@ -37,6 +47,8 @@ export interface WorkflowStep {
   dependsOn: string[];
   dependsMode?: WorkflowDependencyMode;
   when?: WorkflowCondition;
+  /** Explicit failure-handler step, authorized separately by a human. */
+  onFailureOf?: string;
   status: WorkflowStepStatus;
   skipReason?: string;
   approvalId?: string;
@@ -54,6 +66,7 @@ export interface WorkflowRun {
   createdAt: string;
   updatedAt: string;
   steps: WorkflowStep[];
+  recoveries?: WorkflowRecoveryAuthorization[];
 }
 
 export class WorkflowInputError extends Error {}
@@ -73,7 +86,23 @@ export function parseWorkflowDefinition(raw: unknown): WorkflowDefinition {
   }
 
   const dependencies = new Map(definition.steps.map(step => [step.id, step.dependsOn]));
+  const handlers = new Set<string>();
   for (const step of definition.steps) {
+    if (step.onFailureOf) {
+      if (!ids.has(step.onFailureOf) || !step.dependsOn.includes(step.onFailureOf)) {
+        throw new WorkflowInputError(
+          "Recovery handler " + step.id + " must directly depend on its existing failed source"
+        );
+      }
+      if (handlers.has(step.onFailureOf)) {
+        throw new WorkflowInputError("Only one recovery handler is allowed per failed step");
+      }
+      handlers.add(step.onFailureOf);
+      if (step.when || step.dependsMode === "settled") {
+        throw new WorkflowInputError("Recovery handlers cannot have conditions or settled dependencies");
+      }
+    }
+
     if (new Set(step.dependsOn).size !== step.dependsOn.length) {
       throw new WorkflowInputError("Duplicate dependencies in step " + step.id);
     }
@@ -107,6 +136,14 @@ export function parseWorkflowDefinition(raw: unknown): WorkflowDefinition {
     }
   }
 
+  // A failed recovery action is terminal. Nested recovery chains would make
+  // external side-effect attestations ambiguous and are deliberately excluded.
+  for (const step of definition.steps) {
+    if (step.onFailureOf && handlers.has(step.id)) {
+      throw new WorkflowInputError("Recovery handlers cannot themselves have recovery handlers");
+    }
+  }
+
   const visited = new Set<string>();
   const visiting = new Set<string>();
   const visit = (id: string): void => {
@@ -121,37 +158,75 @@ export function parseWorkflowDefinition(raw: unknown): WorkflowDefinition {
   return definition;
 }
 
+export function failedStepHandler(run: WorkflowRun, stepId: string): WorkflowStep | undefined {
+  return run.steps.find(step => step.onFailureOf === stepId);
+}
+
+export function recoveryAuthorized(run: WorkflowRun, stepId: string): boolean {
+  return Boolean(run.recoveries?.some(item => item.stepId === stepId));
+}
+
 export function workflowStatus(run: WorkflowRun): WorkflowStatus {
-  if (run.steps.some(s => s.status === "FAILED")) return "FAILED";
-  if (run.steps.some(s => s.status === "RUNNING")) return "NEEDS_RECONCILIATION";
-  if (run.steps.some(s => s.status === "WAITING_APPROVAL")) return "AWAITING_APPROVAL";
-  if (run.steps.every(s => s.status === "COMPLETED" || s.status === "SKIPPED")) return "COMPLETED";
+  // An ambiguous in-flight effect always takes precedence over historical failures.
+  if (run.steps.some(step => step.status === "RUNNING")) return "NEEDS_RECONCILIATION";
+  if (run.steps.some(step => step.status === "WAITING_APPROVAL")) return "AWAITING_APPROVAL";
+
+  const failed = run.steps.filter(step => step.status === "FAILED");
+  if (failed.length) {
+    for (const source of failed) {
+      const handler = failedStepHandler(run, source.id);
+      if (!handler || handler.status === "FAILED" || handler.status === "SKIPPED") return "FAILED";
+    }
+    if (failed.some(source => !recoveryAuthorized(run, source.id))) {
+      return "RECOVERY_REQUIRED";
+    }
+    if (run.steps.every(step =>
+      step.status === "COMPLETED" || step.status === "SKIPPED" || step.status === "FAILED")) {
+      return failed.every(source => failedStepHandler(run, source.id)?.status === "COMPLETED")
+        ? "COMPLETED_WITH_FAILURES"
+        : "FAILED";
+    }
+    return "RECOVERING";
+  }
+  if (run.steps.every(step => step.status === "COMPLETED" || step.status === "SKIPPED")) {
+    return "COMPLETED";
+  }
   return "ACTIVE";
 }
 
 export function readyWorkflowSteps(run: WorkflowRun): WorkflowStep[] {
-  const complete = new Set(run.steps.filter(s => s.status === "COMPLETED").map(s => s.id));
-  const settled = new Set(run.steps.filter(s =>
-    s.status === "COMPLETED" || s.status === "SKIPPED").map(s => s.id));
-  return run.steps.filter(step => step.status === "PENDING" && (
-    (step.dependsMode ?? "all") === "settled"
-      ? step.dependsOn.every(id => settled.has(id)) && step.dependsOn.some(id => complete.has(id))
-      : step.dependsOn.every(id => complete.has(id))
-  ));
+  const complete = new Set(run.steps.filter(step => step.status === "COMPLETED").map(step => step.id));
+  const settled = new Set(run.steps.filter(step =>
+    step.status === "COMPLETED" || step.status === "SKIPPED").map(step => step.id));
+  return run.steps.filter(step => {
+    if (step.status !== "PENDING") return false;
+    if (step.onFailureOf) {
+      const source = run.steps.find(parent => parent.id === step.onFailureOf);
+      return source?.status === "FAILED"
+        && recoveryAuthorized(run, source.id)
+        && step.dependsOn.every(id => id === source.id || complete.has(id));
+    }
+    return (step.dependsMode ?? "all") === "settled"
+      ? step.dependsOn.every(id => settled.has(id)) &&
+        step.dependsOn.some(id => complete.has(id))
+      : step.dependsOn.every(id => complete.has(id));
+  }).sort((a, b) => Number(Boolean(b.onFailureOf)) - Number(Boolean(a.onFailureOf)));
 }
 
 export function workflowResponse(run: WorkflowRun) {
-  const completed = run.steps.filter(s => s.status === "COMPLETED").length;
-  const skipped = run.steps.filter(s => s.status === "SKIPPED").length;
+  const completed = run.steps.filter(step => step.status === "COMPLETED").length;
+  const skipped = run.steps.filter(step => step.status === "SKIPPED").length;
+  const failed = run.steps.filter(step => step.status === "FAILED").length;
   return {
     ...run,
     status: workflowStatus(run),
     progress: {
       completed,
       skipped,
+      failed,
       total: run.steps.length,
-      percent: Math.round(100 * (completed + skipped) / run.steps.length),
-      ready: readyWorkflowSteps(run).map(s => s.id)
+      percent: Math.round(100 * (completed + skipped + failed) / run.steps.length),
+      ready: readyWorkflowSteps(run).map(step => step.id)
     }
   };
 }
