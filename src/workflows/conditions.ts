@@ -87,6 +87,13 @@ export function evaluateWorkflowBranches(
         break;
       }
       const mode = step.dependsMode ?? "all";
+      if (step.onFailureOf) {
+        const original = parents.find(parent => parent?.id === step.onFailureOf);
+        if (original?.status === "COMPLETED" || original?.status === "SKIPPED") {
+          skip(step, "The original step did not fail; recovery was not needed");
+          continue;
+        }
+      }
       const failedParents = parents.filter(parent => parent?.status === "FAILED");
       if (failedParents.length) {
         if (!step.onFailureOf ||
