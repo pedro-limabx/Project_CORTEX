@@ -7,7 +7,7 @@ import { evaluatePolicy } from "../security/policy.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { ToolRegistry } from "../tools/registry.js";
 import type { WorkflowStore } from "./store.js";
-import { inspectStepInput, resolveStepInput } from "./bindings.js";
+import { inspectStepInput, resolveStepInput, referencesStepOutput } from "./bindings.js";
 import { evaluateWorkflowBranches } from "./conditions.js";
 import {
   parseWorkflowDefinition,
@@ -50,6 +50,11 @@ export class WorkflowEngine {
       // validate syntax and dependencies now, then validate the resolved
       // input through the tool schema before requesting approval/executing.
       const inspected = inspectStepInput(step.input, step.id, step.dependsOn);
+      if (step.onFailureOf && referencesStepOutput(inspected.input, step.onFailureOf)) {
+        throw new WorkflowInputError(
+          "Recovery handler " + step.id + " cannot reference outputs of the failed step"
+        );
+      }
       let prepared = inspected.input;
       if (!inspected.hasBindings) {
         try {
@@ -72,6 +77,7 @@ export class WorkflowEngine {
         dependsOn: step.dependsOn,
         ...(step.dependsMode ? { dependsMode: step.dependsMode } : {}),
         ...(step.when ? { when: step.when } : {}),
+        ...(step.onFailureOf ? { onFailureOf: step.onFailureOf } : {}),
         status: "PENDING" as const
       };
     });
@@ -84,7 +90,8 @@ export class WorkflowEngine {
         input: step.input,
         dependsOn: step.dependsOn,
         ...(step.dependsMode ? { dependsMode: step.dependsMode } : {}),
-        ...(step.when ? { when: step.when } : {})
+        ...(step.when ? { when: step.when } : {}),
+        ...(step.onFailureOf ? { onFailureOf: step.onFailureOf } : {})
       }))
     };
   }
@@ -168,12 +175,17 @@ export class WorkflowEngine {
       run = await this.settle(run);
     }
     const status = workflowStatus(run);
-    if (status === "COMPLETED") return workflowResponse(run);
-    if (status === "FAILED" || status === "NEEDS_RECONCILIATION") {
+    if (status === "COMPLETED" || status === "COMPLETED_WITH_FAILURES") {
+      return workflowResponse(run);
+    }
+    if (status === "FAILED" || status === "NEEDS_RECONCILIATION" ||
+        status === "RECOVERY_REQUIRED") {
       throw new WorkflowConflictError(
         status === "FAILED"
           ? "Workflow failed; it cannot be retried automatically"
-          : "An interrupted step requires verified reconciliation before advancing"
+          : status === "RECOVERY_REQUIRED"
+            ? "A failed step requires explicit operator recovery authorization"
+            : "An interrupted step requires verified reconciliation before advancing"
       );
     }
 
@@ -280,11 +292,14 @@ export class WorkflowEngine {
       grantedPermissions: granted
     } satisfies ToolContext, approved);
 
+    // A timeout is an ambiguous result: the remote side effect may still be
+    // running. Preserve RUNNING until an operator verifies the external outcome.
+    const timedOut = !result.ok && result.error === "Tool timeout";
     run = await this.transition(run, step.id, {
-      status: result.ok ? "COMPLETED" : "FAILED",
+      status: timedOut ? "RUNNING" : result.ok ? "COMPLETED" : "FAILED",
       ...(result.ok && result.output !== undefined ? { output: result.output } : {}),
       ...(!result.ok ? { error: result.error ?? "Unknown tool failure" } : {}),
-      finishedAt: new Date().toISOString()
+      ...(!timedOut ? { finishedAt: new Date().toISOString() } : {})
     });
 
     if (this.audit) {
@@ -303,6 +318,43 @@ export class WorkflowEngine {
 
     run = await this.settle(run);
     return workflowResponse(run);
+  }
+
+  /**
+   * A human certifies that the failed action has been investigated. This
+   * authorizes ONE explicitly declared alternate handler; it never replays
+   * the failed tool nor executes the alternate handler in this request.
+   */
+  async authorizeRecovery(userId: string, id: string, stepId: string, note: string) {
+    const run = await this.load(userId, id);
+    if (workflowStatus(run) === "NEEDS_RECONCILIATION") {
+      throw new WorkflowConflictError("Reconcile uncertain external actions before recovery");
+    }
+    const failed = run.steps.find(step => step.id === stepId && step.status === "FAILED");
+    if (!failed) throw new WorkflowConflictError("Selected step has no confirmed failed result");
+    const handler = run.steps.find(step => step.onFailureOf === stepId);
+    if (!handler || handler.status !== "PENDING") {
+      throw new WorkflowConflictError("No pending declared recovery handler for this step");
+    }
+    if (run.recoveries?.some(entry => entry.stepId === stepId)) {
+      return workflowResponse(run);
+    }
+    if (typeof note !== "string" || note.trim().length < 10 || note.length > 500) {
+      throw new WorkflowInputError("Recovery confirmation note must contain 10 to 500 characters");
+    }
+
+    const next = structuredClone(run);
+    next.recoveries = [
+      ...(next.recoveries ?? []),
+      { stepId, authorizedAt: new Date().toISOString(), note: note.trim() }
+    ];
+    next.version = run.version + 1;
+    next.updatedAt = new Date().toISOString();
+    const saved = await this.store.update(userId, run.version, next);
+    if (!saved) throw new WorkflowConflictError("Workflow was modified by another request");
+    // Atomic CAS owns authorization. Settling is deterministic, and if the
+    // process exits here, advance() will redo only the SKIPPED decisions.
+    return workflowResponse(await this.settle(next));
   }
 
   /** Operator attests the external outcome; this never re-executes a tool. */
