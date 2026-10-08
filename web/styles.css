@@ -256,3 +256,16 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 @media (max-width:640px) {
   .alert-watch-controls { flex-direction:column;align-items:stretch }
 }
+
+
+/* V10 durable notification center, distinct from V9 browser-only polling. */
+.backend-center { margin-bottom:20px }
+.backend-center .card-head { margin-bottom:14px }
+.backend-config { display:flex;gap:16px;align-items:end;flex-wrap:wrap;margin:16px 0 }
+.backend-config>.field-label { margin:0;min-width:155px;flex:1 }
+.backend-config>.field-label select { margin-top:7px }
+.backend-config>.check { min-width:220px;min-height:40px }
+.backend-events-head { margin-top:26px;border-top:1px solid var(--border);padding-top:20px }
+.notification-counter { font-size:12px;color:#f8c98b;margin-left:6px }
+.backend-center #backend-events-list { max-height:260px }
+@media(max-width:650px) { .backend-config { align-items:stretch;flex-direction:column } .backend-config>.field-label { width:100% } }

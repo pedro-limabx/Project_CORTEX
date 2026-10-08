@@ -118,9 +118,9 @@
       <section class="panel" data-panel="alerts" hidden>
         <div class="page-heading">
           <div>
-            <div class="eyebrow">SUPERVISED OPERATIONS / CORTEX V8</div>
+            <div class="eyebrow">PERSISTENT OPERATIONS / CORTEX V10</div>
             <h1>Central de <span>alertas.</span></h1>
-            <p>Identifique situações importantes, marque como vistas e prepare avisos sem enviar mensagens automaticamente.</p>
+            <p>Notificações persistentes geradas pelo servidor, além dos alertas supervisionados da V8/V9. Nenhuma ação externa é executada.</p>
           </div>
           <button id="refresh-alerts" class="btn btn-outline" type="button">↻ Consultar alertas</button>
         </div>
@@ -152,6 +152,53 @@
             </p>
           </div>
         </article>
+
+        <article class="card backend-center">
+          <div class="card-head"><h2>Monitor autônomo no servidor</h2><span class="overline">CORTEX V10 / POSTGRESQL</span></div>
+          <p id="backend-monitor-status" class="hint" role="status" aria-live="polite">Consultando serviço persistente...</p>
+          <div class="backend-config">
+            <label class="check" for="backend-monitor-enabled">
+              <input id="backend-monitor-enabled" type="checkbox"> Ativar verificações no backend
+            </label>
+            <label class="field-label" for="backend-monitor-interval">Frequência
+              <select id="backend-monitor-interval">
+                <option value="60">1 minuto</option>
+                <option value="300">5 minutos</option>
+                <option value="900">15 minutos</option>
+                <option value="3600">60 minutos</option>
+              </select>
+            </label>
+            <label class="field-label" for="backend-monitor-cooldown">Intervalo mínimo entre alertas semelhantes
+              <select id="backend-monitor-cooldown">
+                <option value="60">1 minuto</option>
+                <option value="600" selected>10 minutos</option>
+                <option value="3600">1 hora</option>
+                <option value="21600">6 horas</option>
+                <option value="86400">24 horas</option>
+              </select>
+            </label>
+            <button id="backend-monitor-save" type="button" class="btn btn-primary">Salvar configuração</button>
+          </div>
+          <p class="hint">Configuração salva no PostgreSQL. O monitor funciona sem esta aba, somente enquanto o Node.js e o banco estiverem ativos. Nenhum provedor externo está habilitado.</p>
+        </article>
+        <article class="card backend-center">
+          <div class="card-head">
+            <h2>Notificações persistentes <span id="backend-notice-count" class="notification-counter">—</span></h2>
+            <button id="backend-notice-refresh" type="button" class="btn btn-outline small">↻ Atualizar</button>
+          </div>
+          <div class="backend-config">
+            <label class="field-label" for="backend-notice-view">Exibir
+              <select id="backend-notice-view">
+                <option value="unread" selected>Não lidas</option>
+                <option value="all">Todas</option>
+              </select>
+            </label>
+          </div>
+          <div id="backend-notice-list" class="alerts-list" aria-live="polite"><div class="blank">Aguardando primeira consulta.</div></div>
+          <p class="hint">As mensagens contêm apenas estado, prioridade, ID e data. Ler não aprova nem resolve uma ocorrência.</p>
+          <div class="card-head backend-events-head"><h2>Histórico de verificações</h2><span class="overline">TRILHA DE AUDITORIA</span></div>
+          <div id="backend-events-list" class="monitor-list"></div>
+        </article>
         <div class="metrics monitoring-metrics" aria-label="Resumo dos alertas da amostra">
           <div class="metric"><small>AVISOS IDENTIFICADOS</small><strong id="alerts-total">—</strong><span>Na amostra selecionada</span></div>
           <div class="metric"><small>NÃO VISTOS</small><strong id="alerts-unread">—</strong><span>Precisam ser examinados</span></div>
@@ -163,7 +210,7 @@
           <p class="hint">Marcar um alerta como visto não resolve o problema, não concede permissões e não executa ferramentas. Os avisos voltam a exigir atenção quando a versão do workflow muda.</p>
           <div id="alerts-list" class="alerts-list" aria-live="polite"><div class="blank">Ainda não há alertas carregados.</div></div>
         </article>
-        <div class="tip">Na v9, as verificações a cada 60 segundos só são iniciadas por você e funcionam enquanto esta aba estiver aberta. Os avisos do navegador também precisam de permissão explícita. Não há e-mails, SMS, push por servidor nem garantia de entrega com a aba fechada.</div>
+        <div class="tip">O acompanhamento da V9 continua opcional nesta aba. O serviço V10 é independente do navegador, mas não continua durante a suspensão do Codespaces. Não há envio automático de e-mails, WhatsApp ou Telegram.</div>
       </section>
 
       <section class="panel" data-panel="chat" hidden>

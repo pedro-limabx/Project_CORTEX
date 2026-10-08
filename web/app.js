@@ -134,7 +134,7 @@ function tab(name) {
   $("#page-name").textContent = labels[name];
   hideNotice();
   if (name === "monitoring") action(loadMonitoring);
-  if (name === "alerts") action(loadAlerts);
+  if (name === "alerts") action(loadAlertCenter);
   if (name === "workflows") action(loadWorkflows);
   if (name === "tasks") action(loadTasks);
   if (name === "tools") action(loadTools);
@@ -278,7 +278,7 @@ async function loadAlerts() {
 
 async function refreshAll() {
   await checkHealth();
-  const results = await Promise.allSettled([loadTools(), loadWorkflows(), loadTasks(), loadMonitoring(), loadAlerts()]);
+  const results = await Promise.allSettled([loadTools(), loadWorkflows(), loadTasks(), loadMonitoring(), loadAlerts(), loadBackendCenter()]);
   const rejected = results.find(result => result.status === "rejected");
   if (rejected) throw rejected.reason;
 }
@@ -510,7 +510,7 @@ function renderAlerts(snapshot) {
 }
 
 $("#refresh-alerts").addEventListener("click",
-  event => action(loadAlerts, event.currentTarget));
+  event => action(loadAlertCenter, event.currentTarget));
 $("#alerts-limit").addEventListener("change", event => {
   state.alertsLimit = Number(event.currentTarget.value);
   void action(loadAlerts);
@@ -560,6 +560,119 @@ $("#alerts-browser-toggle").addEventListener("click", event => action(async () =
   showNotice("Permissão concedida nesta aba. Ative o acompanhamento para receber novos avisos.", "success");
 }, event.currentTarget));
 updateAlertWatchControls();
+
+
+// CORTEX V10: persistent inbox and explicitly configured server monitor.
+// Browser remains a presentation client; never schedules backend checks.
+async function loadAlertCenter() {
+  await Promise.all([loadAlerts(), loadBackendCenter()]);
+}
+function showBackendStatus(settings) {
+  $("#backend-monitor-enabled").checked = settings.enabled;
+  // Respect custom integer values set via API even when not in the presets.
+  for (const [id, value] of [
+    ["backend-monitor-interval", settings.intervalSeconds],
+    ["backend-monitor-cooldown", settings.cooldownSeconds]
+  ]) {
+    const control = $("#" + id);
+    if (![...control.options].some(option => Number(option.value) === value)) {
+      const option = node("option", "", value + " segundos (personalizado)");
+      option.value = String(value);
+      control.append(option);
+    }
+    control.value = String(value);
+  }
+  $("#backend-monitor-status").textContent = settings.enabled
+    ? "Ativo no backend · Última verificação: " + dateTime(settings.lastCheckedAt)
+      + " · Próxima: " + dateTime(settings.nextCheckAt)
+      + " · Resultado: " + (settings.lastCheckOk === null ? "sem histórico" : settings.lastCheckOk ? "OK" : "falhou")
+    : "Desativado no servidor · Configuração preservada no PostgreSQL.";
+}
+function renderPersistentNotices(data) {
+  $("#backend-notice-count").textContent = String(data.unread);
+  const target = clear($("#backend-notice-list"));
+  if (!data.notifications.length) {
+    target.append(info("Nenhuma notificação persistente nesta seleção."));
+    return;
+  }
+  data.notifications.forEach(notification => {
+    const entry = node("article", "operational-alert " + notification.severity
+      + (notification.readAt ? " acknowledged" : ""));
+    const header = node("div", "row-head");
+    header.append(node("strong", "", notification.severity === "critical"
+      ? "Incidente que exige intervenção" : "Ação humana pendente"), statusPill(notification.status));
+    entry.append(header, node("p", "row-meta",
+      "Workflow " + notification.workflowId + " · Versão " + notification.version
+      + " · " + dateTime(notification.createdAt)));
+    if (notification.readAt) entry.append(node("p", "alert-acknowledged",
+      "✓ Lida em " + dateTime(notification.readAt)));
+    const buttons = node("div", "actions");
+    buttons.append(makeButton("Examinar workflow ↗", "btn-ghost small",
+      () => openMonitoredWorkflow(notification.workflowId)));
+    if (!notification.readAt) {
+      buttons.append(makeButton("✓ Marcar como lida", "btn-outline small", async () => {
+        if (!window.confirm("Confirmar leitura? Isto não aprova, executa ou reconcilia nenhuma ação.")) return;
+        await api("/api/notifications/" + encodeURIComponent(notification.id) + "/read", {
+          method: "POST", body: { confirmed: true }
+        });
+        await loadBackendCenter();
+        showNotice("Leitura persistida sem alterar o workflow.", "success");
+      }));
+    }
+    entry.append(buttons);
+    target.append(entry);
+  });
+}
+function renderBackendEvents(events) {
+  const target = clear($("#backend-events-list"));
+  if (!events.length) { target.append(info("Ainda não existem verificações registradas.")); return; }
+  const label = {
+    SETTINGS_UPDATED: "Configuração alterada",
+    CHECK_COMPLETED: "Verificação concluída",
+    CHECK_FAILED: "Verificação falhou"
+  };
+  events.forEach(event => {
+    const entry = node("div", "monitor-activity-item");
+    entry.append(node("strong", "", label[event.kind] || "Evento"),
+      node("p", "row-meta", dateTime(event.createdAt) + " · " +
+        event.sampled + " workflows analisados · " + event.created + " novos alertas"));
+    target.append(entry);
+  });
+}
+async function loadBackendCenter() {
+  const result = await api("/api/monitoring/backend");
+  if (!result.available) {
+    $("#backend-monitor-status").textContent =
+      "Indisponível: configure DATABASE_URL e reinicie o servidor para habilitar a V10.";
+    $("#backend-monitor-save").disabled = true;
+    clear($("#backend-notice-list")).append(info("PostgreSQL não está configurado."));
+    clear($("#backend-events-list"));
+    $("#backend-notice-count").textContent = "—";
+    return;
+  }
+  $("#backend-monitor-save").disabled = false;
+  showBackendStatus(result.settings);
+  const view = $("#backend-notice-view").value;
+  const [notices, history] = await Promise.all([
+    api("/api/notifications?view=" + encodeURIComponent(view) + "&limit=50"),
+    api("/api/monitoring/backend/events?limit=12")
+  ]);
+  renderPersistentNotices(notices);
+  renderBackendEvents(history.events || []);
+}
+$("#backend-monitor-save").addEventListener("click", event => action(async () => {
+  const config = {
+    enabled: $("#backend-monitor-enabled").checked,
+    intervalSeconds: Number($("#backend-monitor-interval").value),
+    cooldownSeconds: Number($("#backend-monitor-cooldown").value)
+  };
+  await api("/api/monitoring/backend", { method: "PUT", body: config });
+  await loadBackendCenter();
+  showNotice("Configuração persistida no servidor. Nenhuma ferramenta foi executada.", "success");
+}, event.currentTarget));
+$("#backend-notice-refresh").addEventListener("click", event =>
+  action(loadBackendCenter, event.currentTarget));
+$("#backend-notice-view").addEventListener("change", () => void action(loadBackendCenter));
 
 // NEURON Chat
 function addMessage(who, value, fromUser = false) {
