@@ -15,6 +15,7 @@ import { InMemoryApprovalStore } from "./approval/store.js";
 import { PostgresApprovalStore } from "./approval/postgres-store.js";
 import { LocalTestProvider, OpenAICompatibleProvider } from "./llm/provider.js";
 import { NeuronCore } from "./neuron/core.js";
+import { taskToResponse } from "./neuron/task.js";
 import { ToolExecutor } from "./tools/executor.js";
 import { calculatorTool, timeTool } from "./tools/builtin.js";
 import { createWebSearchTool } from "./tools/web-search.js";
@@ -120,24 +121,59 @@ app.get("/api/tasks", { preHandler: authenticate }, async (request, reply) => {
     return reply.code(400).send({ error: "limit must be an integer between 1 and 100" });
   }
   const records = await memory.listTasks(config.CORTEX_USER_ID, limit);
-  return { tasks: records.map(record => ({
-    id: record.id,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    plan: JSON.parse(record.content)
-  })) };
+  return { tasks: records.map(record => {
+    try {
+      return taskToResponse(record);
+    } catch {
+      return { id: record.id, error: "Persisted task is invalid" };
+    }
+  }) };
 });
 
 app.get("/api/tasks/:id", { preHandler: authenticate }, async (request, reply) => {
   const { id } = request.params as { id: string };
   const record = await memory.getTask(config.CORTEX_USER_ID, id);
   if (!record) return reply.code(404).send({ error: "task not found" });
-  return {
-    id: record.id,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    plan: JSON.parse(record.content)
-  };
+  try {
+    return taskToResponse(record);
+  } catch {
+    return reply.code(422).send({ error: "Persisted task is invalid" });
+  }
+});
+
+app.post("/api/tasks/:id/resume", { preHandler: authenticate }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const body = request.body && typeof request.body === "object"
+    ? request.body as { message?: unknown; approvalId?: unknown; dryRun?: unknown }
+    : {};
+  if (body.message !== undefined && (typeof body.message !== "string" || !body.message.trim())) {
+    return reply.code(400).send({ error: "message must be a nonempty string" });
+  }
+  if (body.approvalId !== undefined && typeof body.approvalId !== "string") {
+    return reply.code(400).send({ error: "approvalId must be a string" });
+  }
+  try {
+    return await neuron.respond(
+      config.CORTEX_USER_ID,
+      typeof body.message === "string" ? body.message.trim() : "Continue a tarefa preservando o objetivo original.",
+      {
+        resumeTaskId: id,
+        ...(body.dryRun === true ? { dryRun: true } : {}),
+        ...(typeof body.approvalId === "string" ? { approvalId: body.approvalId } : {})
+      }
+    );
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    if (reason === "Task not found") return reply.code(404).send({ error: reason });
+    if (reason === "Persisted task is invalid") return reply.code(422).send({ error: reason });
+    if (reason === "Task is already finalized" || reason.includes("interrupted tool step")) {
+      return reply.code(409).send({ error: reason });
+    }
+    if (reason.includes("Approval") || reason.includes("permissions") || reason.includes("dry-run")) {
+      return reply.code(400).send({ error: reason });
+    }
+    throw error;
+  }
 });
 
 app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
