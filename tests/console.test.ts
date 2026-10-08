@@ -91,7 +91,10 @@ describe("CORTEX web console", () => {
         throw new Error("Unexpected selector: " + selector);
       },
       api, addMessage: messages, renderChatInspection: inspect,
-      showNotice: notice, hideNotice: vi.fn(), loadTasks: vi.fn(), state
+      showNotice: notice, hideNotice: vi.fn(), loadTasks: vi.fn(), state,
+      // The mocked API rejects with a host-realm Error. Match the browser's
+      // single-realm behavior so "instanceof Error" preserves its message.
+      Error
     });
     const keydown = (changes: Partial<KeyEvent> = {}) => {
       const preventDefault = vi.fn();
