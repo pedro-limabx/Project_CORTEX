@@ -118,7 +118,7 @@
       <section class="panel" data-panel="alerts" hidden>
         <div class="page-heading">
           <div>
-            <div class="eyebrow">PERSISTENT OPERATIONS / CORTEX V10</div>
+            <div class="eyebrow">PERSISTENT OPERATIONS / CORTEX V11</div>
             <h1>Central de <span>alertas.</span></h1>
             <p>Notificações persistentes geradas pelo servidor, além dos alertas supervisionados da V8/V9. Nenhuma ação externa é executada.</p>
           </div>
@@ -154,8 +154,12 @@
         </article>
 
         <article class="card backend-center">
-          <div class="card-head"><h2>Monitor autônomo no servidor</h2><span class="overline">CORTEX V10 / POSTGRESQL</span></div>
+          <div class="card-head"><h2>Monitor autônomo no servidor</h2><span class="overline">CORTEX V11 / POSTGRESQL</span></div>
           <p id="backend-monitor-status" class="hint" role="status" aria-live="polite">Consultando serviço persistente...</p>
+          <div class="backend-health-row">
+            <p id="backend-monitor-health" class="hint" role="status" aria-live="polite">Aguardando diagnóstico...</p>
+            <button id="backend-monitor-check" type="button" class="btn btn-outline small" disabled>Verificar agora (somente leitura)</button>
+          </div>
           <div class="backend-config">
             <label class="check" for="backend-monitor-enabled">
               <input id="backend-monitor-enabled" type="checkbox"> Ativar verificações no backend
@@ -179,7 +183,7 @@
             </label>
             <button id="backend-monitor-save" type="button" class="btn btn-primary">Salvar configuração</button>
           </div>
-          <p class="hint">Configuração salva no PostgreSQL. O monitor funciona sem esta aba, somente enquanto o Node.js e o banco estiverem ativos. Nenhum provedor externo está habilitado.</p>
+          <p class="hint">Configuração salva no PostgreSQL. O monitor funciona sem esta aba, somente enquanto o Node.js e o banco estiverem ativos. Verificações manuais exigem ativação prévia e respeitam intervalo mínimo de 30 segundos. Nenhum provedor externo está habilitado.</p>
         </article>
         <article class="card backend-center">
           <div class="card-head">

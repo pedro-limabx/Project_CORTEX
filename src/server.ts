@@ -27,6 +27,7 @@ import { WorkflowReporter } from "./workflows/reporter.js";
 import { MonitoringService } from "./workflows/monitoring.js";
 import { PostgresMonitorRepository } from "./autonomy/store.js";
 import { AutonomousMonitoringService, InAppNotificationChannel, validateMonitorSettings } from "./autonomy/monitor.js";
+import { diagnoseMonitorHealth } from "./autonomy/diagnostics.js";
 import {
   InMemoryAlertAcknowledgementStore,
   PostgresAlertAcknowledgementStore,
@@ -348,6 +349,24 @@ app.put("/api/monitoring/backend", { preHandler: authenticate }, async (request,
     () => app.log.error("Autonomous monitoring check failed (details redacted)")
   );
   return { available: true, settings, delivery: ["in-app"] };
+});
+
+// V11: health information and user-confirmed checks; neither executes actions.
+app.get("/api/monitoring/backend/health", { preHandler: authenticate }, async (request, reply) => {
+  if (!autonomousStore) return reply.code(503).send({error:"PostgreSQL is required"});
+  const settings = await autonomousStore.getSettings(config.CORTEX_USER_ID);
+  const inbox = await autonomousStore.list(config.CORTEX_USER_ID, "unread", 1);
+  return {...diagnoseMonitorHealth(settings), unreadNotifications: inbox.unread};
+});
+app.post("/api/monitoring/backend/check", { preHandler: authenticate }, async (request, reply) => {
+  if (!backendMonitor) return reply.code(503).send({error:"PostgreSQL is required"});
+  const body = request.body;
+  if (!body || typeof body !== "object" || Array.isArray(body)
+    || Object.keys(body).length !== 1 || (body as {confirmed?: unknown}).confirmed !== true) {
+    return reply.code(400).send({error:"Explicit confirmed=true is required"});
+  }
+  const result = await backendMonitor.checkDue(true);
+  return {...result, actionExecuted:false, approvalGranted:false, readOnly:true};
 });
 
 app.get("/api/monitoring/backend/events", { preHandler: authenticate }, async (request, reply) => {

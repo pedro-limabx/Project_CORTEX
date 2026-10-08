@@ -31,3 +31,13 @@ A arquitetura possui a interface NotificationChannel e o único adaptador InAppN
 Sem PostgreSQL, o backend autônomo fica indisponível (HTTP 503 nas rotas que exigem persistência), enquanto as funções anteriores podem continuar em memória conforme configuração existente. O servidor Node.js precisa estar ativo, conectado ao PostgreSQL. **Codespaces suspenso/parado, servidor free-tier hibernando, queda da rede ou banco indisponível = monitor interrompido**. Para operação 24/7 real, usar hospedagem always-on e banco persistente com supervisão externa. É um monitor de processo, não um job independente de ciclo de vida da hospedagem.
 
 Validação local: npm install && npm run typecheck && npm test && npm run build. Testes reais com banco: definir DATABASE_URL para uma base de testes PostgreSQL antes de npm test. No GitHub Actions, o job verify sobe PostgreSQL 16 e executa testes, TypeScript e build.
+
+## CORTEX V11 — Saúde do monitor e verificação manual
+
+- `GET /api/monitoring/backend/health`: diagnóstico autenticado do serviço (disabled, starting, healthy, degraded, overdue), atrasos e contagem de avisos não lidos, sem conteúdo de workflows.
+- `POST /api/monitoring/backend/check` com corpo exato `{"confirmed":true}`: verificação manual somente de leitura, **somente com monitor ativado**. Respeita bloqueio PostgreSQL entre instâncias e intervalo mínimo de 30 segundos entre verificações, persistido entre reinícios. Não aprova, reconcilia, executa ferramentas ou invoca LLMs.
+- `/console` → Alertas: diagnóstico visual e botão "Verificar agora (somente leitura)".
+
+"Funcionando" significa somente que a última checagem registrada teve sucesso e a próxima não está atrasada em mais de 30 segundos; não é um atestado de disponibilidade 24/7. O banco e o servidor precisam continuar ativos.
+
+Segurança: Vitest >=4.1.11 (linha 4.x) e source-map-js >=1.2.2 são exigidos; a CI roda `npm audit --audit-level=moderate` e `npm audit --omit=dev`. A migração major de Vitest é validada pelos testes da CI.
