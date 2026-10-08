@@ -21,6 +21,7 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain('src="/console/app.js"');
     expect(index.body).toContain('id="workflow-objective"');
     expect(index.body).toContain('id="propose-workflow"');
+    expect(index.body).toContain('id="chat-workflow-status"');
     expect(index.body).toContain('href="/console/styles.css"');
     expect(index.body).not.toContain("127.0.0.1:3000/api/chat");
 
@@ -29,6 +30,8 @@ describe("CORTEX web console", () => {
     expect(script.headers["content-type"]).toContain("javascript");
     expect(script.body).toContain('api("/api/chat"');
     expect(script.body).toContain('api("/api/workflows/propose"');
+    expect(script.body).toContain('function askWorkflowStatus(id)');
+    expect(script.body).toContain("result?.workflowReport");
 
     const stylesheet = await app.inject({ method: "GET", url: "/console/styles.css" });
     expect(stylesheet.statusCode).toBe(200);
@@ -154,6 +157,43 @@ describe("CORTEX web console", () => {
     expect(chat.textarea.value).toBe("Calcule 25*18");
     expect(chat.messages).not.toHaveBeenCalled();
     expect(chat.button.disabled).toBe(false);
+  });
+
+  it("requests workflow summaries only on click and preserves unfinished chat drafts", async () => {
+    const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
+    const start = source.indexOf("function askWorkflowStatus(id) {");
+    const end = source.indexOf("// Workflows", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+
+    const input = { value: "", focus: vi.fn() };
+    const tab = vi.fn();
+    const sendChatMessage = vi.fn();
+    const showNotice = vi.fn();
+    let clickHandler: (() => void) | undefined;
+    const button = {
+      addEventListener: (_type: string, callback: () => void) => { clickHandler = callback; }
+    };
+    runInNewContext(source.slice(start, end), {
+      $: (selector: string) => selector === "#message" ? input : button,
+      tab, sendChatMessage, showNotice,
+      chatSending: false
+    });
+    expect(clickHandler).toBeDefined();
+    expect(sendChatMessage).not.toHaveBeenCalled();
+
+    clickHandler?.();
+    expect(tab).toHaveBeenCalledWith("chat");
+    expect(input.value).toBe("Como estão meus workflows?");
+    expect(sendChatMessage).toHaveBeenCalledOnce();
+
+    // A second consultation cannot erase text the user has not sent.
+    input.value = "Meu rascunho de mensagem";
+    clickHandler?.();
+    expect(input.value).toBe("Meu rascunho de mensagem");
+    expect(input.focus).toHaveBeenCalledOnce();
+    expect(sendChatMessage).toHaveBeenCalledOnce();
+    expect(showNotice).toHaveBeenCalledWith(expect.stringContaining("rascunho"));
   });
 
   it("ships parseable JavaScript without embedding server secrets or local URL assumptions", async () => {
