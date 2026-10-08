@@ -108,6 +108,26 @@ describe("NEURON natural-language workflow drafting", () => {
     expect(await store.list("user-a", 10)).toEqual([]);
   });
 
+  it("warns that model-drafted failure recovery requires human authorization", async () => {
+    const definition = {
+      objective: "Recover after a controlled arithmetic failure",
+      steps: [
+        { id: "original", tool: "calculator.evaluate", input: { expression: "10/0" } },
+        { id: "fallback", tool: "calculator.evaluate", input: { expression: "10+5" },
+          dependsOn: ["original"], onFailureOf: "original" }
+      ]
+    };
+    const { planner, store } = harness({
+      async chat() { return { provider: "mock", text: JSON.stringify(definition) }; }
+    });
+    const result = await planner.propose("Proponha um fluxo com recuperação de falhas");
+    expect(result.definition.steps[1]).toMatchObject({ onFailureOf: "original" });
+    expect(result.warnings.join(" ")).toContain("autorização humana");
+    expect(result.saved).toBe(false);
+    expect(result.executed).toBe(false);
+    expect(await store.list("user-a", 10)).toEqual([]);
+  });
+
   it("rejects fabricated tools, invalid tool inputs and cyclic plans", async () => {
     const cases = [
       { objective: "fake", steps: [{ id: "a", tool: "tool.nonexistent", input: {} }] },
