@@ -22,6 +22,7 @@ import { calculatorTool, timeTool } from "./tools/builtin.js";
 import { createWebSearchTool } from "./tools/web-search.js";
 import { ToolRegistry } from "./tools/registry.js";
 import { WorkflowEngine } from "./workflows/engine.js";
+import { WorkflowProposalService, WorkflowProposalError } from "./workflows/proposal.js";
 import { InMemoryWorkflowStore, PostgresWorkflowStore, type WorkflowStore } from "./workflows/store.js";
 import { WorkflowConflictError, WorkflowInputError, WorkflowNotFoundError } from "./workflows/types.js";
 
@@ -91,6 +92,7 @@ const llm = config.LOCAL_TEST_MODE
   : new OpenAICompatibleProvider(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL);
 const neuron = new NeuronCore(llm, memory, registry, executor, permissions, approvals, audit);
 const workflows = new WorkflowEngine(workflowStore, registry, executor, permissions, approvals, audit);
+const workflowProposals = new WorkflowProposalService(llm, workflows, registry, config.LOCAL_TEST_MODE);
 
 app.get("/health", async () => ({
   ok: true,
@@ -221,6 +223,24 @@ function workflowError(reply: FastifyReply, error: unknown): FastifyReply {
   if (error instanceof WorkflowConflictError) return reply.code(409).send({ error: error.message });
   throw error;
 }
+
+// Draft only. The model cannot persist, approve or execute a proposed workflow.
+app.post("/api/workflows/propose", { preHandler: authenticate }, async (request, reply) => {
+  const body = request.body && typeof request.body === "object"
+    ? request.body as { objective?: unknown }
+    : {};
+  try {
+    return await workflowProposals.propose(body.objective);
+  } catch (error) {
+    if (error instanceof WorkflowProposalError) {
+      return reply.code(422).send({ error: error.message });
+    }
+    if (error instanceof WorkflowInputError) {
+      return reply.code(400).send({ error: error.message });
+    }
+    throw error;
+  }
+});
 
 app.post("/api/workflows", { preHandler: authenticate }, async (request, reply) => {
   try {
