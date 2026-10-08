@@ -23,6 +23,7 @@ import { createWebSearchTool } from "./tools/web-search.js";
 import { ToolRegistry } from "./tools/registry.js";
 import { WorkflowEngine } from "./workflows/engine.js";
 import { WorkflowProposalService, WorkflowProposalError } from "./workflows/proposal.js";
+import { WorkflowReporter } from "./workflows/reporter.js";
 import { InMemoryWorkflowStore, PostgresWorkflowStore, type WorkflowStore } from "./workflows/store.js";
 import { WorkflowConflictError, WorkflowInputError, WorkflowNotFoundError } from "./workflows/types.js";
 
@@ -90,7 +91,8 @@ const executor = new ToolExecutor(registry);
 const llm = config.LOCAL_TEST_MODE
   ? new LocalTestProvider()
   : new OpenAICompatibleProvider(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL);
-const neuron = new NeuronCore(llm, memory, registry, executor, permissions, approvals, audit);
+const workflowReporter = new WorkflowReporter(workflowStore);
+const neuron = new NeuronCore(llm, memory, registry, executor, permissions, approvals, audit, workflowReporter);
 const workflows = new WorkflowEngine(workflowStore, registry, executor, permissions, approvals, audit);
 const workflowProposals = new WorkflowProposalService(llm, workflows, registry, config.LOCAL_TEST_MODE);
 
@@ -258,6 +260,23 @@ app.get("/api/workflows", { preHandler: authenticate }, async (request, reply) =
     return reply.code(400).send({ error: "limit must be an integer from 1 to 100" });
   }
   return { workflows: await workflows.list(config.CORTEX_USER_ID, limit) };
+});
+
+// Reporting is read-only and scoped to the server-controlled identity.
+app.get("/api/workflows/summary", { preHandler: authenticate }, async (request, reply) => {
+  const query = request.query as { id?: unknown; limit?: unknown };
+  const limit = query.limit === undefined ? 10 : Number(query.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+    return reply.code(400).send({ error: "limit must be an integer from 1 to 20" });
+  }
+  if (query.id !== undefined && (typeof query.id !== "string"
+    || !/^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$/.test(query.id))) {
+    return reply.code(400).send({ error: "Invalid workflow id" });
+  }
+  return workflowReporter.summarize(
+    config.CORTEX_USER_ID,
+    typeof query.id === "string" ? { id: query.id, limit } : { limit }
+  );
 });
 
 app.get("/api/workflows/:id", { preHandler: authenticate }, async (request, reply) => {
