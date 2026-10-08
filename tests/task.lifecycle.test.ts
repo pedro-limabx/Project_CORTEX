@@ -9,7 +9,7 @@ import { PermissionEngine } from "../src/permissions/engine.js";
 import { InMemoryPermissionStore } from "../src/permissions/in-memory-store.js";
 import { ToolExecutor } from "../src/tools/executor.js";
 import { ToolRegistry } from "../src/tools/registry.js";
-import { parseTaskPlan, taskToResponse } from "../src/neuron/task.js";
+import { parseTaskPlan, reconcileInterruptedPlan, taskToResponse } from "../src/neuron/task.js";
 
 function makeCore(provider: LLMProvider, memory: InMemoryStore, registry: ToolRegistry, approvals: ApprovalEngine) {
   return new NeuronCore(
@@ -190,7 +190,7 @@ describe("Persisted task lifecycle", () => {
       }
     };
     const result = await makeCore(resumeProvider, memory, registry, approvals)
-      .respond("user-1", "continue", { resumeTaskId: task?.id });
+      .respond("user-1", "continue", { resumeTaskId: task!.id });
     expect(result.plan.status).toBe("COMPLETED");
     expect(result.plan.steps).toHaveLength(1);
     expect(result.toolResults[0]).toMatchObject({
@@ -198,6 +198,27 @@ describe("Persisted task lifecycle", () => {
       output: { skipped: true }
     });
     expect(executed).toBe(1);
+  });
+
+
+  it("reconciles an uncertain interrupted step only with an explicitly verified outcome", () => {
+    const interrupted = parseTaskPlan(JSON.stringify({
+      objective: "write once",
+      status: "ACTIVE",
+      currentStep: 1,
+      revision: 1,
+      steps: [{ index: 1, tool: "test.write", input: {}, status: "PLANNED" }]
+    }));
+    const completed = reconcileInterruptedPlan(interrupted, "completed");
+    expect(completed.status).toBe("ACTIVE");
+    expect(completed.currentStep).toBeUndefined();
+    expect(completed.steps[0]?.status).toBe("COMPLETED");
+    const failed = reconcileInterruptedPlan(interrupted, "failed");
+    expect(failed.status).toBe("REPLANNING");
+    expect(failed.currentStep).toBe(1);
+    expect(failed.steps[0]?.status).toBe("FAILED");
+    expect(() => reconcileInterruptedPlan(completed, "completed"))
+      .toThrow("Task has no single interrupted final step");
   });
 
   it("rejects damaged task records rather than leaking them into the API", () => {
