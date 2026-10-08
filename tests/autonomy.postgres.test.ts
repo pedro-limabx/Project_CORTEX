@@ -24,6 +24,7 @@ suite("CORTEX V10 PostgreSQL integration", () => {
     expect((await separate.getSettings(user)).intervalSeconds).toBe(60);
     expect((await separate.getSettings(other)).enabled).toBe(false);
     // Changing the frequency must reschedule an already-enabled monitor.
+    await separate.configure(user,true,3600,600);
     await pool!.query(
       "UPDATE cortex_monitor_settings SET next_check_at = now() + interval '1 hour' WHERE user_id=$1",
       [user]
