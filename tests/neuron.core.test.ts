@@ -337,6 +337,18 @@ describe("NEURON persisted task resume", () => {
           message.role === "user" && message.content?.includes("Calcule 10 + 5.")
         )).toBe(true);
 
+        if (calls === 3) {
+          return {
+            provider: "test",
+            text: "",
+            toolCalls: [{
+              id: "calc-1",
+              name: "calculator.evaluate",
+              arguments: JSON.stringify({ expression: "10+5" })
+            }]
+          };
+        }
+
         const lastTool = messages[messages.length - 1];
         expect(lastTool?.role).toBe("tool");
         expect(JSON.parse(lastTool?.content ?? "{}")).toMatchObject({
