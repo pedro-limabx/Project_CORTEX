@@ -8,6 +8,7 @@ export interface PlanStep {
   input: unknown;
   status: PlanStepStatus;
   error?: string;
+  approvalId?: string;
 }
 
 export interface ExecutionPlan {
