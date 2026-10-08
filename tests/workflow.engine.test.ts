@@ -112,7 +112,7 @@ describe("Workflow orchestration", () => {
         { id: "first", tool: "test.record", input: { value: 1 } }
       ]
     });
-    expect(created.progress).toEqual({ completed: 0, total: 3, percent: 0, ready: ["first"] });
+    expect(created.progress).toEqual({ completed: 0, skipped: 0, total: 3, percent: 0, ready: ["first"] });
     expect(created.status).toBe("ACTIVE");
 
     const first = await engine.advance("user-a", created.id);
