@@ -7,6 +7,7 @@ import { evaluatePolicy } from "../security/policy.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { ToolRegistry } from "../tools/registry.js";
 import type { WorkflowStore } from "./store.js";
+import { inspectStepInput, resolveStepInput } from "./bindings.js";
 import {
   parseWorkflowDefinition,
   readyWorkflowSteps,
@@ -44,14 +45,24 @@ export class WorkflowEngine {
       if (typeof schema?.parse !== "function") {
         throw new WorkflowInputError("Tool has no valid input schema: " + step.tool);
       }
-      let parsed: unknown;
-      try {
-        parsed = schema.parse(step.input);
-      } catch {
-        throw new WorkflowInputError("Invalid input for tool: " + step.tool);
+      // References may resolve to numbers, strings or objects at runtime;
+      // validate syntax and dependencies now, then validate the resolved
+      // input through the tool schema before requesting approval/executing.
+      const inspected = inspectStepInput(step.input, step.id, step.dependsOn);
+      let prepared = inspected.input;
+      if (!inspected.hasBindings) {
+        try {
+          prepared = schema.parse(inspected.input);
+        } catch {
+          throw new WorkflowInputError("Invalid input for tool: " + step.tool);
+        }
       }
-      // Preserve the exact serialized input used later for authorization/execution.
-      const serialized = JSON.stringify(parsed);
+      let serialized: string | undefined;
+      try {
+        serialized = JSON.stringify(prepared);
+      } catch {
+        throw new WorkflowInputError("Tool input is not JSON serializable");
+      }
       if (serialized === undefined) throw new WorkflowInputError("Tool input is not JSON serializable");
       return {
         id: step.id,
@@ -158,13 +169,42 @@ export class WorkflowEngine {
       return workflowResponse(run);
     }
 
+    // Resolve only outputs from declared COMPLETED dependencies. Fail closed
+    // before any approval request, RUNNING transition or tool side effect.
+    let resolvedInput: unknown;
+    try {
+      const unparsed = pendingApproval && Object.prototype.hasOwnProperty.call(step, "resolvedInput")
+        ? step.resolvedInput
+        : resolveStepInput(run, step.id);
+      const schema = tool.inputSchema as { parse?: (input: unknown) => unknown };
+      if (typeof schema?.parse !== "function") {
+        throw new WorkflowInputError("Tool has no valid input schema");
+      }
+      resolvedInput = schema.parse(unparsed);
+      // The same JSON payload is subsequently approved, persisted and executed.
+      const serialized = JSON.stringify(resolvedInput);
+      if (serialized === undefined || Buffer.byteLength(serialized, "utf8") > 65_536) {
+        throw new WorkflowInputError("Resolved tool input exceeds the allowed size");
+      }
+      resolvedInput = JSON.parse(serialized) as unknown;
+    } catch (error) {
+      const detail = error instanceof WorkflowInputError ? error.message : "Resolved input does not match tool schema";
+      run = await this.transition(run, step.id, {
+        status: "FAILED",
+        error: detail.slice(0, 500),
+        finishedAt: new Date().toISOString()
+      });
+      return workflowResponse(run);
+    }
+
     const granted = await this.permissions.getPermissions(userId);
     const policy = evaluatePolicy(tool, granted, false);
 
     if (!pendingApproval && !policy.allowed && policy.requiresApproval) {
-      const request = await this.approvals.request(userId, step.tool, step.input, tool.risk);
+      const request = await this.approvals.request(userId, step.tool, resolvedInput, tool.risk);
       run = await this.transition(run, step.id, {
         status: "WAITING_APPROVAL",
+        resolvedInput,
         approvalId: request.id
       });
       return workflowResponse(run);
@@ -191,12 +231,13 @@ export class WorkflowEngine {
     // cannot consume authorization and then lose the workflow version race.
     run = await this.transition(run, step.id, {
       status: "RUNNING",
+      resolvedInput,
       startedAt: new Date().toISOString()
     });
 
     let approved = false;
     if (pendingApproval) {
-      approved = await this.approvals.consume(approvalId!, userId, step.tool, step.input);
+      approved = await this.approvals.consume(approvalId!, userId, step.tool, resolvedInput);
       if (!approved) {
         // No tool has been called: it is safe to put the step back into
         // WAITING_APPROVAL and let the operator resolve the approval.
@@ -206,7 +247,7 @@ export class WorkflowEngine {
     }
 
     const requestId = crypto.randomUUID();
-    const result = await this.executor.execute(step.tool, step.input, {
+    const result = await this.executor.execute(step.tool, resolvedInput, {
       userId,
       requestId,
       dryRun: false,
