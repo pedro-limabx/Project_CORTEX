@@ -28,6 +28,8 @@ import { MonitoringService } from "./workflows/monitoring.js";
 import { PostgresMonitorRepository } from "./autonomy/store.js";
 import { AutonomousMonitoringService, InAppNotificationChannel, validateMonitorSettings } from "./autonomy/monitor.js";
 import { diagnoseMonitorHealth } from "./autonomy/diagnostics.js";
+import { PostgresReminderRepository } from "./reminders/store.js";
+import { ReminderScheduler, ReminderInputError, validateNewReminder } from "./reminders/service.js";
 import {
   InMemoryAlertAcknowledgementStore,
   PostgresAlertAcknowledgementStore,
@@ -69,6 +71,7 @@ let audit: AuditStore = new InMemoryAuditStore();
 let workflowStore: WorkflowStore;
 let alertAcknowledgements: AlertAcknowledgementStore;
 let autonomousStore: PostgresMonitorRepository | undefined;
+let reminderStore: PostgresReminderRepository | undefined;
 if (pool) {
   const postgresMemory = new PostgresMemoryStore(pool);
   await postgresMemory.initialize();
@@ -90,6 +93,8 @@ if (pool) {
   alertAcknowledgements = postgresAlerts;
   autonomousStore = new PostgresMonitorRepository(pool);
   await autonomousStore.initialize();
+  reminderStore = new PostgresReminderRepository(pool);
+  await reminderStore.initialize();
   app.log.info("Persistent PostgreSQL memory and audit enabled");
 } else {
   memory = new InMemoryStore();
@@ -118,6 +123,10 @@ const backendMonitor = autonomousStore
   ? new AutonomousMonitoringService(autonomousStore, operationalAlerts, config.CORTEX_USER_ID,
     new InAppNotificationChannel(autonomousStore), () => new Date(),
     () => app.log.error('Autonomous monitoring check failed (details redacted)'))
+  : undefined;
+const reminderScheduler = reminderStore
+  ? new ReminderScheduler(reminderStore, config.CORTEX_USER_ID, () => new Date(),
+      () => app.log.error("Reminder scheduler failed (details redacted)"))
   : undefined;
 const neuron = new NeuronCore(llm, memory, registry, executor, permissions, approvals, audit, workflowReporter);
 const workflows = new WorkflowEngine(workflowStore, registry, executor, permissions, approvals, audit);
@@ -404,6 +413,61 @@ app.post("/api/notifications/:id/read", { preHandler: authenticate }, async (req
   return { read: true, actionExecuted: false, approvalGranted: false };
 });
 
+// V12: single-shot reminders. User-created text is private and owner-scoped.
+// No external message delivery or autonomous tool execution occurs.
+const reminderUuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+
+app.get("/api/reminders", { preHandler: authenticate }, async (request, reply) => {
+  if (!reminderStore) return reply.code(503).send({error:"PostgreSQL is required for reminders"});
+  const query = request.query as { view?: unknown; limit?: unknown };
+  const view = query.view === undefined ? "all" : query.view;
+  const limit = query.limit === undefined ? 50 : Number(query.limit);
+  if ((view !== "all" && view !== "pending" && view !== "due"
+      && view !== "done" && view !== "cancelled")
+      || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return reply.code(400).send({error:"Invalid reminder view or limit (1..100)"});
+  }
+  // Catch newly-due reminders on demand, including after a Codespaces pause.
+  await reminderScheduler?.checkDue();
+  const [reminders, due] = await Promise.all([
+    reminderStore.list(config.CORTEX_USER_ID, view, limit),
+    reminderStore.dueCount(config.CORTEX_USER_ID)
+  ]);
+  return {reminders, due, delivery:"in-app-only", readOnlyChecks:true};
+});
+
+app.post("/api/reminders", { preHandler: authenticate }, async (request, reply) => {
+  if (!reminderStore) return reply.code(503).send({error:"PostgreSQL is required for reminders"});
+  let input: ReturnType<typeof validateNewReminder>;
+  try { input = validateNewReminder(request.body); }
+  catch (error) {
+    if (error instanceof ReminderInputError) return reply.code(400).send({error:error.message});
+    throw error;
+  }
+  const reminder = await reminderStore.create(config.CORTEX_USER_ID,input.title,input.dueAt,new Date().toISOString());
+  return reply.code(201).send({reminder,delivery:"in-app-only",actionExecuted:false});
+});
+
+app.post("/api/reminders/:id/:action", { preHandler: authenticate }, async (request, reply) => {
+  if (!reminderStore) return reply.code(503).send({error:"PostgreSQL is required for reminders"});
+  const { id, action } = request.params as {id:string;action:string};
+  const body = request.body;
+  if (!reminderUuid.test(id) || (action !== "complete" && action !== "cancel")
+      || !body || typeof body !== "object" || Array.isArray(body)
+      || Object.keys(body).length !== 1 || (body as {confirmed?:unknown}).confirmed !== true) {
+    return reply.code(400).send({error:"Valid reminder id, action and confirmed=true required"});
+  }
+  const updated = await reminderStore.transition(config.CORTEX_USER_ID,id,
+    action === "complete" ? "DONE" : "CANCELLED",new Date().toISOString());
+  if (!updated) {
+    const existing = await reminderStore.get(config.CORTEX_USER_ID,id);
+    if (!existing) return reply.code(404).send({error:"Reminder not found"});
+    return reply.code(409).send({error:"Reminder is already finalized"});
+  }
+  return {reminder:await reminderStore.get(config.CORTEX_USER_ID,id),
+    actionExecuted:false,approvalGranted:false};
+});
+
 // Reporting is read-only and scoped to the server-controlled identity.
 // Owner-scoped, read-only status and performance indicators from a bounded
 // snapshot of recent workflows. No raw inputs, outputs or secrets are exposed.
@@ -540,6 +604,7 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
 
 const shutdown = async () => {
   await backendMonitor?.stop();
+  await reminderScheduler?.stop();
   await app.close();
   await pool?.end();
   process.exit(0);
@@ -549,3 +614,4 @@ process.on("SIGTERM", shutdown);
 
 await app.listen({ port: config.PORT, host: config.HOST });
 backendMonitor?.start();
+reminderScheduler?.start();

@@ -40,6 +40,8 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain('id="monitor-alerts"');
     expect(index.body).toContain('id="monitor-activity"');
     expect(index.body).toContain('id="monitor-recent"');
+    expect(index.body).toContain('data-panel="reminders"');
+    expect(index.body).toContain('id="reminder-form"');
     expect(index.body).toContain('href="/console/styles.css"');
     expect(index.body).not.toContain("127.0.0.1:3000/api/chat");
 
@@ -47,6 +49,8 @@ describe("CORTEX web console", () => {
     expect(script.statusCode).toBe(200);
     expect(script.headers["content-type"]).toContain("javascript");
     expect(script.body).toContain('api("/api/chat"');
+    expect(script.body).toContain('api("/api/reminders"');
+    expect(script.body).toContain('function loadReminders()');
     expect(script.body).toContain('api("/api/workflows/propose"');
     expect(script.body).toContain("{{steps.primeiro.result}}/3");
     expect(script.body).toContain("{{steps.a.result}}+{{steps.b.result}}");
