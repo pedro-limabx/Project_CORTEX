@@ -62,7 +62,8 @@ describe("NEURON natural-language workflow drafting", () => {
     expect(await store.list("user-a", 10)).toEqual([]);
     expect(chat).toHaveBeenCalledTimes(1);
     expect(chat.mock.calls[0]?.[0]?.[0]?.role).toBe("system");
-    expect(chat.mock.calls[0]?.[1]).toMatchObject({ toolChoice: "none", temperature: 0 });
+    expect(chat.mock.calls[0]?.[1]).toMatchObject({ toolChoice: "none" });
+    expect(chat.mock.calls[0]?.[1]).not.toHaveProperty("temperature");
   });
 
   it("warns about sensitive operations without creating approval requests", async () => {
