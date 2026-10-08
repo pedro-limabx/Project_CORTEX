@@ -123,6 +123,7 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 .row-meta { color:#8099ae;font-size:10px;margin-top:7px;word-break:break-all }
 .status { display:inline-block;padding:4px 8px;font-size:9px;letter-spacing:.06em;font-weight:850;border-radius:8px;white-space:nowrap;color:#a2dbf1;background:#1c394b;border:1px solid #27556d }
 .status.completed,.status.ok { background:#143a31;color:#80e3b9;border-color:#245e4c }
+.status.skipped { background:#29303b;color:#b8c2cf;border-color:#495365 }
 .status.failed,.status.error { background:#3b222b;color:#f2a1a9;border-color:#75424f }
 .status.waiting_approval,.status.awaiting_approval,.status.needs_reconciliation,.status.replanning { background:#372f20;color:#f5d18b;border-color:#655333 }
 .status.running,.status.active,.status.planned { background:#18324b;color:#8ccaf7;border-color:#265479 }
