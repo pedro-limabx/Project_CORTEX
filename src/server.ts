@@ -307,6 +307,29 @@ app.post("/api/workflows/:id/advance", { preHandler: authenticate }, async (requ
   }
 });
 
+// Operator attests a confirmed failed action before a declared alternate
+// handler may be advanced. This request NEVER invokes the failed or new tool.
+app.post("/api/workflows/:id/recovery", { preHandler: authenticate }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const body = request.body && typeof request.body === "object"
+    ? request.body as { stepId?: unknown; confirmed?: unknown; note?: unknown }
+    : {};
+  if (body.confirmed !== true || typeof body.stepId !== "string"
+      || typeof body.note !== "string" || body.note.trim().length < 10
+      || body.note.length > 500) {
+    return reply.code(400).send({
+      error: "stepId, confirmed=true and a verification note of 10 to 500 characters are required"
+    });
+  }
+  try {
+    return await workflows.authorizeRecovery(
+      config.CORTEX_USER_ID, id, body.stepId, body.note
+    );
+  } catch (error) {
+    return workflowError(reply, error);
+  }
+});
+
 app.post("/api/workflows/:id/reconcile", { preHandler: authenticate }, async (request, reply) => {
   const { id } = request.params as { id: string };
   const body = request.body && typeof request.body === "object"
