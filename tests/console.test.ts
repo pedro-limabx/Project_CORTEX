@@ -44,67 +44,111 @@ describe("CORTEX web console", () => {
     await app.close();
   });
 
-  it("sends on Enter but keeps Shift+Enter for multiline messages", async () => {
-    const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
-    const start = source.indexOf('$("#message").addEventListener("keydown"');
-    const finish = source.indexOf('$("#chat-form").addEventListener("submit"', start);
+  function setupChatHandlers(
+    source: string,
+    overrides: { api?: (path: string, options: unknown) => Promise<unknown> } = {}
+  ) {
+    const start = source.indexOf("let chatSending = false;");
+    const finish = source.indexOf("function renderChatInspection(result)", start);
     expect(start).toBeGreaterThan(-1);
     expect(finish).toBeGreaterThan(start);
 
     type KeyEvent = {
-      key: string;
-      shiftKey: boolean;
-      ctrlKey: boolean;
-      altKey: boolean;
-      metaKey: boolean;
-      isComposing: boolean;
-      keyCode: number;
+      key: string; shiftKey: boolean; ctrlKey: boolean; altKey: boolean;
+      metaKey: boolean; isComposing: boolean; keyCode: number;
       preventDefault: () => void;
     };
-
-    let onKeydown: ((event: KeyEvent) => void) | undefined;
-    const form = { requestSubmit: vi.fn() };
-    const message = {
-      addEventListener: (_name: string, callback: (event: KeyEvent) => void) => {
-        onKeydown = callback;
+    const input = { value: "Calcule 25*18" };
+    const button = { disabled: false };
+    const checkbox = { checked: false };
+    const key = vi.fn();
+    const submit = vi.fn();
+    const form = {
+      addEventListener: (_name: string, callback: (event: { preventDefault: () => void }) => void) => {
+        submit.mockImplementation(callback);
       }
     };
+    const textarea = {
+      ...input,
+      addEventListener: (_name: string, callback: (event: KeyEvent) => void) => {
+        key.mockImplementation(callback);
+      }
+    };
+    const api = vi.fn(overrides.api ?? (async () => ({
+      requestId: "req-1", text: "O resultado é 450.",
+      plan: { objective: input.value, status: "COMPLETED", steps: [] }
+    })));
+    const messages = vi.fn();
+    const notice = vi.fn();
+    const inspect = vi.fn();
+    const state = { busy: true, lastChat: null as unknown }; // background refresh must not block chat
     runInNewContext(source.slice(start, finish), {
-      $: (selector: string) => selector === "#message" ? message : form
+      $: (selector: string) => {
+        if (selector === "#message") return textarea;
+        if (selector === "#dry-run") return checkbox;
+        if (selector === "#chat-form button[type=submit]") return button;
+        if (selector === "#chat-form") return form;
+        throw new Error("Unexpected selector: " + selector);
+      },
+      api, addMessage: messages, renderChatInspection: inspect,
+      showNotice: notice, hideNotice: vi.fn(), loadTasks: vi.fn(), state
     });
-    expect(onKeydown).toBeDefined();
-
-    const dispatch = (changes: Partial<KeyEvent> = {}) => {
+    const keydown = (changes: Partial<KeyEvent> = {}) => {
       const preventDefault = vi.fn();
-      onKeydown?.({
-        key: "Enter",
-        shiftKey: false,
-        ctrlKey: false,
-        altKey: false,
-        metaKey: false,
-        isComposing: false,
-        keyCode: 13,
-        preventDefault,
-        ...changes
+      key({
+        key: "Enter", shiftKey: false, ctrlKey: false, altKey: false, metaKey: false,
+        isComposing: false, keyCode: 13, preventDefault, ...changes
       });
       return preventDefault;
     };
+    return { textarea, input, button, api, messages, notice, inspect, state, keydown, submit };
+  }
 
-    expect(dispatch()).toHaveBeenCalledOnce();
-    expect(form.requestSubmit).toHaveBeenCalledOnce();
+  it("actually sends through the API on Enter and through the button submit handler", async () => {
+    const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
+    const chat = setupChatHandlers(source);
 
+    expect(chat.keydown()).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(chat.messages).toHaveBeenCalledTimes(2));
+    expect(chat.api).toHaveBeenCalledWith("/api/chat", {
+      method: "POST", body: { message: "Calcule 25*18", dryRun: false }
+    });
+    expect(chat.messages).toHaveBeenNthCalledWith(1, "VOCÊ", "Calcule 25*18", true);
+    expect(chat.messages).toHaveBeenNthCalledWith(2, "NEURON", "O resultado é 450.");
+    expect(chat.button.disabled).toBe(false);
+    expect(chat.textarea.value).toBe("");
+    expect(chat.state.lastChat).toMatchObject({ requestId: "req-1" });
+
+    chat.textarea.value = "Outro teste";
+    const preventDefault = vi.fn();
+    chat.submit({ preventDefault });
+    expect(preventDefault).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(chat.api).toHaveBeenCalledTimes(2));
+    expect(chat.api).toHaveBeenNthCalledWith(2, "/api/chat", {
+      method: "POST", body: { message: "Outro teste", dryRun: false }
+    });
+  });
+
+  it("keeps Shift+Enter for newlines and preserves draft on API failures", async () => {
+    const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
+    const failingApi = vi.fn(async () => { throw new Error("Network unreachable"); });
+    const chat = setupChatHandlers(source, { api: failingApi });
     for (const changes of [
-      { shiftKey: true },
-      { ctrlKey: true },
-      { altKey: true },
-      { metaKey: true },
-      { isComposing: true },
-      { keyCode: 229 },
-      { key: "A" }
+      { shiftKey: true }, { isComposing: true }, { keyCode: 229 },
+      { key: "A" }, { ctrlKey: true }, { altKey: true }, { metaKey: true }
     ]) {
-      expect(dispatch(changes)).not.toHaveBeenCalled();
+      expect(chat.keydown(changes)).not.toHaveBeenCalled();
     }
-    expect(form.requestSubmit).toHaveBeenCalledOnce();
+    expect(chat.api).not.toHaveBeenCalled();
+
+    chat.keydown();
+    await vi.waitFor(() => expect(chat.notice).toHaveBeenCalledOnce());
+    expect(chat.notice).toHaveBeenCalledWith(
+      "Falha ao enviar ao NEURON: Network unreachable", "error"
+    );
+    expect(chat.textarea.value).toBe("Calcule 25*18");
+    expect(chat.messages).not.toHaveBeenCalled();
+    expect(chat.button.disabled).toBe(false);
   });
 
   it("ships parseable JavaScript without embedding server secrets or local URL assumptions", async () => {
