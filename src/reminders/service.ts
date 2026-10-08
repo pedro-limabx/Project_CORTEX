@@ -1,6 +1,6 @@
 import type { ReminderRepository } from "./store.js";
 
-const ABSOLUTE_TIMESTAMP = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$/;
+const ABSOLUTE_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 const MAX_FUTURE_MS = 2 * 366 * 24 * 60 * 60 * 1000;
 const MIN_FUTURE_MS = 60_000;
 export class ReminderInputError extends Error {}
