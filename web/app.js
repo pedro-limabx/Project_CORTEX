@@ -415,6 +415,9 @@ function stepView(step) {
   top.append(node("strong", "", step.id + " · " + step.tool), statusPill(step.status));
   item.append(top);
   if (step.dependsOn && step.dependsOn.length) item.append(node("p", "", "Depende de: " + step.dependsOn.join(", ")));
+  if (step.input !== undefined) {
+    item.append(node("p", "", "Entrada original:"), prettyBlock(step.input));
+  }
   if (step.error) item.append(node("p", "", "Erro: " + step.error));
   if (step.approvalId) item.append(node("p", "", "Aprovação: " + step.approvalId));
   if (step.resolvedInput !== undefined) {
