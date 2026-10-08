@@ -87,11 +87,12 @@
               <option value="chain">Encadeamento real: resultado do 1º cálculo → 2º cálculo</option>
               <option value="fork">Cálculos independentes + dependência conjunta</option>
               <option value="conditional">Decisão condicional: desconto e caminhos alternativos</option>
+              <option value="recovery">Recuperação supervisionada após falha confirmada</option>
               <option value="invalid">Grafo inválido (para testar validação)</option>
             </select>
             <label class="field-label" for="workflow-json">Definição JSON</label>
             <textarea id="workflow-json" class="code-editor" spellcheck="false" rows="17"></textarea>
-            <p class="hint">Para transmitir resultados, use <code>{{steps.primeiro.result}}/3</code> e declare <code>dependsOn</code>. Para escolher caminhos, adicione <code>when</code> com a etapa de origem, caminho, operador e valor. Etapas cuja condição é falsa são ignoradas; <code>dependsMode: "settled"</code> espera os caminhos alternativos terminarem.</p>
+            <p class="hint">Use <code>dependsOn</code> para dependências, <code>when</code> para condições e <code>onFailureOf</code> para declarar recuperação de uma falha. A recuperação exige confirmação humana separada; autorizar não executa nenhuma ferramenta.</p>
             <div class="actions"><button id="create-workflow" type="button" class="btn btn-primary">+ Criar workflow</button><button id="reset-example" type="button" class="btn btn-ghost">Restaurar</button></div>
           </article>
           <div class="stack">
