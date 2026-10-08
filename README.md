@@ -142,8 +142,9 @@ operação externa ambígua.
 O CORTEX possui agora um **motor de workflows determinístico** separado do loop
 conversacional do NEURON. Cada fluxo é um grafo dirigido acíclico (DAG) de até
 32 etapas, executadas **uma por chamada** de avanço, com dependências explícitas.
-A versão inicial aceita definições pela API; **não transforma automaticamente**
-prompts em DAGs e **não executa em segundo plano**.
+A versão atual aceita definições pela API e pode **propor rascunhos de DAGs**
+a partir de linguagem natural. Os rascunhos exigem revisão: o sistema **não cria
+nem executa automaticamente** as propostas e **não executa em segundo plano**.
 
 ### API v2
 
