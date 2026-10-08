@@ -327,8 +327,12 @@ export class WorkflowEngine {
    */
   async authorizeRecovery(userId: string, id: string, stepId: string, note: string) {
     const run = await this.load(userId, id);
-    if (workflowStatus(run) === "NEEDS_RECONCILIATION") {
+    const status = workflowStatus(run);
+    if (status === "NEEDS_RECONCILIATION") {
       throw new WorkflowConflictError("Reconcile uncertain external actions before recovery");
+    }
+    if (status !== "RECOVERY_REQUIRED" && status !== "RECOVERING") {
+      throw new WorkflowConflictError("Workflow is not awaiting supervised recovery");
     }
     const failed = run.steps.find(step => step.id === stepId && step.status === "FAILED");
     if (!failed) throw new WorkflowConflictError("Selected step has no confirmed failed result");
