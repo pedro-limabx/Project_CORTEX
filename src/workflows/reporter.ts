@@ -67,10 +67,18 @@ function reportItem(run: WorkflowRun, now: number): WorkflowReportItem {
   };
 }
 
+const statusText: Record<WorkflowReportItem["status"], string> = {
+  ACTIVE: "ativo",
+  AWAITING_APPROVAL: "aguardando aprovação",
+  NEEDS_RECONCILIATION: "execução em curso ou resultado incerto",
+  COMPLETED: "concluído",
+  FAILED: "falhou"
+};
+
 function formatItem(item: WorkflowReportItem): string {
   return [
     `• ${item.objective} (ID: ${item.id})`,
-    `  Situação: ${item.status}; progresso: ${item.completed}/${item.total} etapas (${item.percent}%).`,
+    `  Situação: ${statusText[item.status]}; progresso: ${item.completed}/${item.total} etapas (${item.percent}%).`,
     `  ${item.attention}`
   ].join("\n");
 }
@@ -124,7 +132,16 @@ export class WorkflowReporter {
       const uncertain = items.filter(item => item.status === "NEEDS_RECONCILIATION").length;
       const failures = items.filter(item => item.status === "FAILED").length;
       const done = items.filter(item => item.status === "COMPLETED").length;
-      const headline = `Dos ${items.length} workflows recentes consultados: ${active} ativos, ${approvals} aguardando aprovação, ${uncertain} com execução/resultado pendente, ${failures} com falha e ${done} concluídos.`;
+      const countText = (n: number, singular: string, plural: string): string =>
+        `${n} ${n === 1 ? singular : plural}`;
+      const headline = [
+        `Dos ${items.length} workflows recentes consultados:`,
+        countText(active, "ativo", "ativos") + ",",
+        countText(approvals, "aguardando aprovação", "aguardando aprovação") + ",",
+        countText(uncertain, "com execução/resultado pendente", "com execução/resultado pendente") + ",",
+        countText(failures, "com falha", "com falha") + " e",
+        countText(done, "concluído", "concluídos") + "."
+      ].join(" ");
       text = [headline, ...items.map(formatItem)].join("\n\n");
     }
 
