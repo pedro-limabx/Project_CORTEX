@@ -111,6 +111,10 @@ export class ExecutionPlanner {
     this.revision = plan.revision;
   }
 
+  getStep(index: number): PlanStep | undefined {
+    return this.steps.find(step => step.index === index);
+  }
+
   getObjective(): string {
     return this.objective;
   }
