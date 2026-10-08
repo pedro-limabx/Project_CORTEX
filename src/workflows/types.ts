@@ -20,6 +20,8 @@ export interface WorkflowStep {
   id: string;
   tool: string;
   input: unknown;
+  /** Exact schema-validated input used for approval and execution. */
+  resolvedInput?: unknown;
   dependsOn: string[];
   status: WorkflowStepStatus;
   approvalId?: string;
