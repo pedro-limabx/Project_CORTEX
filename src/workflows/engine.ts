@@ -82,6 +82,10 @@ export class WorkflowEngine {
   }
 
   private async load(userId: string, id: string): Promise<WorkflowRun> {
+    // Reject invalid identifiers before PostgreSQL's UUID parser can throw a 500.
+    if (!/^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$/.test(id)) {
+      throw new WorkflowNotFoundError("Workflow not found");
+    }
     const run = await this.store.get(userId, id);
     if (!run) throw new WorkflowNotFoundError("Workflow not found");
     return run;
