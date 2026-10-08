@@ -207,6 +207,15 @@ function addMessage(who, value, fromUser = false) {
   history.append(bubble);
   history.scrollTop = history.scrollHeight;
 }
+// Enter sends the message; Shift+Enter inserts a newline.
+// Do not submit while an IME is composing accented/Asian text.
+$("#message").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229
+      || event.ctrlKey || event.altKey || event.metaKey) return;
+  event.preventDefault();
+  $("#chat-form").requestSubmit();
+});
+
 $("#chat-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const message = $("#message").value.trim();
