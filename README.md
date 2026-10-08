@@ -396,3 +396,94 @@ e `output` (resultado armazenado). No modo local, também é possível escrever
   falham de maneira segura.
 - Não existe execução automática em lote, passagem de saídas entre workflows
   distintos, nem garantia transacional de efeitos externos exatamente uma vez.
+
+
+### CORTEX v4 — Desvios condicionais e caminhos alternativos
+
+Os workflows aceitam condições explícitas (`when`) que verificam resultados
+**já armazenados** de etapas concluídas. O modelo pode propor essas condições,
+mas não decide os caminhos durante a execução: quem compara os valores
+é o motor determinístico do CORTEX.
+
+Exemplo para experimentar em **/console → Workflows v2 → Modelo inicial →
+Decisão condicional**:
+
+```json
+{
+  "objective": "Desconto automático conforme valor calculado",
+  "steps": [
+    {
+      "id": "medicao",
+      "tool": "calculator.evaluate",
+      "input": { "expression": "25*18" }
+    },
+    {
+      "id": "desconto-maior",
+      "tool": "calculator.evaluate",
+      "input": { "expression": "{{steps.medicao.result}}*0.90" },
+      "dependsOn": ["medicao"],
+      "when": {
+        "step": "medicao", "path": "result",
+        "operator": "gte", "value": 400
+      }
+    },
+    {
+      "id": "desconto-menor",
+      "tool": "calculator.evaluate",
+      "input": { "expression": "{{steps.medicao.result}}*0.95" },
+      "dependsOn": ["medicao"],
+      "when": {
+        "step": "medicao", "path": "result",
+        "operator": "lt", "value": 400
+      }
+    },
+    {
+      "id": "conclusao",
+      "tool": "calculator.evaluate",
+      "input": { "expression": "{{steps.medicao.result}}/3" },
+      "dependsOn": ["medicao", "desconto-maior", "desconto-menor"],
+      "dependsMode": "settled"
+    }
+  ]
+}
+```
+
+Depois da primeira execução, o resultado `450` satisfaz `gte 400`.
+O CORTEX deixa `desconto-maior` pendente para execução supervisionada,
+marca `desconto-menor` como **SKIPPED** sem executar sua ferramenta e,
+após a execução do ramo escolhido, disponibiliza a etapa `conclusao`.
+
+**Campos de decisão:**
+
+- `when.step`: ID da etapa de origem; precisa constar em `dependsOn`;
+- `when.path`: campo do resultado persistido (ex.: `result`);
+- `when.operator`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`;
+- `when.value`: valor literal para a comparação;
+- `dependsMode: "all"` (padrão): exige todas as dependências concluídas;
+  se uma for ignorada, a etapa também será ignorada;
+- `dependsMode: "settled"`: espera todas as dependências ficarem concluídas
+  ou ignoradas. Requer ao menos uma dependência concluída para prosseguir;
+  se todas forem ignoradas, a etapa será ignorada também.
+
+**Segurança e persistência:**
+
+- Condições e nomes de campos são validados no cadastro. Comparações
+  numéricas exigem números; não existe coerção automática de tipos.
+- Quando uma condição for falsa, o CORTEX marca a etapa como `SKIPPED`
+  sem solicitar aprovação ou chamar a ferramenta.
+- Resultados ausentes, inválidos ou não confirmados provocam falha
+  segura: não se presume que uma condição seja verdadeira ou falsa.
+- Desvios e propagações de `SKIPPED` são persistidos com controle
+  otimista de versão, sem execução oculta de ferramentas.
+- `progress.skipped` indica quantas etapas não foram executadas;
+  `progress.completed` indica apenas as efetivamente concluídas;
+  o percentual usa ambas as categorias para medir caminhos **resolvidos**.
+- Uma rota sensível escolhida pela condição ainda exige aprovação
+  explícita, permissões e a mesma autorização do mecanismo anterior.
+- Cada pedido de avanço continua executando **no máximo uma ferramenta**;
+  a resolução de etapas descartadas pode ocorrer sem executar ferramentas.
+
+Esta entrega não adiciona paralelismo real, laços, execução automática,
+retentativas externas nem subfluxos transacionais. Condições são
+determinísticas e avaliadas exclusivamente sobre saídas de etapas do mesmo
+workflow.
