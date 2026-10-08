@@ -24,6 +24,7 @@ import { ToolRegistry } from "./tools/registry.js";
 import { WorkflowEngine } from "./workflows/engine.js";
 import { WorkflowProposalService, WorkflowProposalError } from "./workflows/proposal.js";
 import { WorkflowReporter } from "./workflows/reporter.js";
+import { MonitoringService } from "./workflows/monitoring.js";
 import { InMemoryWorkflowStore, PostgresWorkflowStore, type WorkflowStore } from "./workflows/store.js";
 import { WorkflowConflictError, WorkflowInputError, WorkflowNotFoundError } from "./workflows/types.js";
 
@@ -92,6 +93,7 @@ const llm = config.LOCAL_TEST_MODE
   ? new LocalTestProvider()
   : new OpenAICompatibleProvider(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL);
 const workflowReporter = new WorkflowReporter(workflowStore);
+const monitoring = new MonitoringService(workflowStore);
 const neuron = new NeuronCore(llm, memory, registry, executor, permissions, approvals, audit, workflowReporter);
 const workflows = new WorkflowEngine(workflowStore, registry, executor, permissions, approvals, audit);
 const workflowProposals = new WorkflowProposalService(llm, workflows, registry, config.LOCAL_TEST_MODE);
@@ -263,6 +265,17 @@ app.get("/api/workflows", { preHandler: authenticate }, async (request, reply) =
 });
 
 // Reporting is read-only and scoped to the server-controlled identity.
+// Owner-scoped, read-only status and performance indicators from a bounded
+// snapshot of recent workflows. No raw inputs, outputs or secrets are exposed.
+app.get("/api/monitoring/overview", { preHandler: authenticate }, async (request, reply) => {
+  const query = request.query as { limit?: unknown };
+  const limit = query.limit === undefined ? 50 : Number(query.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return reply.code(400).send({ error: "limit must be an integer from 1 to 100" });
+  }
+  return monitoring.overview(config.CORTEX_USER_ID, limit);
+});
+
 app.get("/api/workflows/summary", { preHandler: authenticate }, async (request, reply) => {
   const query = request.query as { id?: unknown; limit?: unknown };
   const limit = query.limit === undefined ? 10 : Number(query.limit);

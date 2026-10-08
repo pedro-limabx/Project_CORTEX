@@ -9,6 +9,8 @@ const state = {
   workflowId: null,
   taskId: null,
   lastChat: null,
+  monitoring: null,
+  monitorLimit: 50,
   busy: false
 };
 
@@ -120,7 +122,7 @@ async function action(operation, button = null) {
 }
 function tab(name) {
   const labels = {
-    overview: "Visão geral", chat: "NEURON Chat",
+    overview: "Visão geral", monitoring: "Monitoramento", chat: "NEURON Chat",
     workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
   };
   if (!labels[name]) return;
@@ -128,6 +130,7 @@ function tab(name) {
   $$(".nav-button").forEach(button => button.classList.toggle("active", button.dataset.tab === name));
   $("#page-name").textContent = labels[name];
   hideNotice();
+  if (name === "monitoring") action(loadMonitoring);
   if (name === "workflows") action(loadWorkflows);
   if (name === "tasks") action(loadTasks);
   if (name === "tools") action(loadTools);
@@ -182,9 +185,15 @@ async function loadTasks() {
     renderTaskDetail(selected);
   }
 }
+async function loadMonitoring() {
+  const result = await api("/api/monitoring/overview?limit=" + state.monitorLimit);
+  state.monitoring = result;
+  renderMonitoring(result);
+}
+
 async function refreshAll() {
   await checkHealth();
-  const results = await Promise.allSettled([loadTools(), loadWorkflows(), loadTasks()]);
+  const results = await Promise.allSettled([loadTools(), loadWorkflows(), loadTasks(), loadMonitoring()]);
   const rejected = results.find(result => result.status === "rejected");
   if (rejected) throw rejected.reason;
 }
@@ -201,6 +210,137 @@ $("#clear-token").addEventListener("click", (event) => action(async () => {
   await refreshAll();
   showNotice("Token removido da memória desta aba.", "success");
 }, event.currentTarget));
+
+// CORTEX v7: read-only operational monitoring.
+const monitorStatuses = [
+  "NEEDS_RECONCILIATION", "FAILED", "RECOVERY_REQUIRED", "AWAITING_APPROVAL",
+  "RECOVERING", "ACTIVE", "COMPLETED_WITH_FAILURES", "COMPLETED"
+];
+const monitorStepStatuses = [
+  "COMPLETED", "SKIPPED", "FAILED", "WAITING_APPROVAL", "RUNNING", "PENDING"
+];
+
+function monitorDuration(ms) {
+  if (ms == null) return "—";
+  if (ms < 1000) return Math.round(ms) + " ms";
+  if (ms < 60000) return (ms / 1000).toFixed(1) + " s";
+  return (ms / 60000).toFixed(1) + " min";
+}
+
+async function openMonitoredWorkflow(id) {
+  state.workflowId = id;
+  tab("workflows");
+  // Called from makeButton's action wrapper. The tab's background loader is
+  // blocked by state.busy here, so explicitly load the selected workflow.
+  await loadWorkflows();
+}
+
+function renderMonitoring(snapshot) {
+  $("#monitor-scope").textContent =
+    "Atualizado em " + dateTime(snapshot.generatedAt) + " · " +
+    snapshot.scope.sampled + " workflows entre os últimos " + snapshot.scope.limit +
+    " consultados. Números da amostra, não de todo o histórico.";
+  $("#monitor-total").textContent = String(snapshot.metrics.total);
+  $("#monitor-completed").textContent = String(snapshot.metrics.completed);
+  $("#monitor-completed-hint").textContent =
+    snapshot.metrics.completionPercent == null
+      ? "Sem amostra para calcular percentual"
+      : snapshot.metrics.completionPercent + "% da amostra finalizada (inclui recuperações)";
+  $("#monitor-attention").textContent = String(snapshot.metrics.requiringAttention);
+  $("#monitor-critical-hint").textContent =
+    snapshot.metrics.critical + " casos críticos · Contagem da amostra";
+  $("#monitor-duration").textContent = monitorDuration(snapshot.metrics.averageTerminalStepDurationMs);
+  $("#monitor-duration-hint").textContent =
+    snapshot.metrics.observedTerminalStepDurations + " etapas com duração verificável";
+
+  const statusTarget = clear($("#monitor-status-distribution"));
+  if (!snapshot.metrics.total) {
+    statusTarget.append(info("Nenhum workflow encontrado nesta amostra."));
+  } else {
+    monitorStatuses.forEach(status => {
+      const count = snapshot.statusCounts[status] || 0;
+      const line = node("div", "monitor-bar-row");
+      const head = node("div", "monitor-bar-head");
+      head.append(node("span", "", statusLabels[status] || status),
+        node("strong", "", String(count)));
+      const track = node("div", "monitor-bar-track");
+      const fill = node("div", "monitor-bar-fill " + status.toLowerCase());
+      fill.style.width = (100 * count / snapshot.metrics.total) + "%";
+      track.append(fill);
+      line.append(head, track);
+      statusTarget.append(line);
+    });
+  }
+
+  const stepTarget = clear($("#monitor-step-counts"));
+  monitorStepStatuses.forEach(status => {
+    const entry = node("div", "monitor-step-count");
+    entry.append(statusPill(status),
+      node("strong", "", String(snapshot.metrics.steps[status] || 0)));
+    stepTarget.append(entry);
+  });
+
+  const alertTarget = clear($("#monitor-alerts"));
+  if (!snapshot.alerts.length) {
+    alertTarget.append(info("Nenhum workflow da amostra exige atenção no momento."));
+  }
+  snapshot.alerts.forEach(alert => {
+    const entry = node("div", "monitor-alert " + alert.severity);
+    const header = node("div", "row-head");
+    header.append(node("strong", "", alert.objective), statusPill(alert.status));
+    entry.append(header,
+      node("p", "", alert.message),
+      node("p", "hint", alert.nextAction),
+      node("p", "row-meta", "Atualizado: " + dateTime(alert.updatedAt)));
+    entry.append(makeButton("Examinar workflow ↗", "btn-ghost small",
+      () => openMonitoredWorkflow(alert.workflowId)));
+    alertTarget.append(entry);
+  });
+
+  const activityTarget = clear($("#monitor-activity"));
+  if (!snapshot.activity.length) {
+    activityTarget.append(info("Sem eventos recentes registrados nesta amostra."));
+  }
+  snapshot.activity.forEach(event => {
+    const entry = node("div", "monitor-activity-item");
+    const label = workflowEventLabels[event.kind] || event.kind;
+    entry.append(node("strong", "", label),
+      node("p", "row-meta", dateTime(event.at) + " · " +
+        (event.stepId ? "Etapa " + event.stepId : "Workflow") + " · " +
+        ({ engine: "Motor", routing: "Desvio", operator: "Operador" }[event.source] || "Evento")));
+    if (event.from && event.to) {
+      entry.append(node("p", "row-meta",
+        (statusLabels[event.from] || event.from) + " → " +
+        (statusLabels[event.to] || event.to)));
+    }
+    entry.append(makeButton("Ver detalhes ↗", "btn-ghost small",
+      () => openMonitoredWorkflow(event.workflowId)));
+    activityTarget.append(entry);
+  });
+
+  const recentTarget = clear($("#monitor-recent"));
+  if (!snapshot.recent.length) recentTarget.append(info("Nenhum workflow recente."));
+  snapshot.recent.forEach(workflow => {
+    const entry = node("div", "monitor-recent-item");
+    const title = node("div", "row-head");
+    title.append(node("strong", "", workflow.objective), statusPill(workflow.status));
+    entry.append(title,
+      node("p", "row-meta",
+        workflow.percent + "% resolvido · " + workflow.completed + " concluídas · " +
+        workflow.skipped + " ignoradas · " + workflow.failed + " falhas"),
+      node("p", "row-meta", "Atualizado: " + dateTime(workflow.updatedAt)));
+    entry.append(makeButton("Abrir workflow ↗", "btn-outline small",
+      () => openMonitoredWorkflow(workflow.id)));
+    recentTarget.append(entry);
+  });
+}
+
+$("#refresh-monitoring").addEventListener("click",
+  event => action(loadMonitoring, event.currentTarget));
+$("#monitor-limit").addEventListener("change", event => {
+  state.monitorLimit = Number(event.currentTarget.value);
+  void action(loadMonitoring);
+});
 
 // NEURON Chat
 function addMessage(who, value, fromUser = false) {

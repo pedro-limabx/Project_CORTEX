@@ -24,6 +24,13 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain('value="recovery"');
     expect(index.body).toContain('id="propose-workflow"');
     expect(index.body).toContain('id="chat-workflow-status"');
+    expect(index.body).toContain('data-tab="monitoring"');
+    expect(index.body).toContain('id="monitor-scope"');
+    expect(index.body).toContain('id="monitor-limit"');
+    expect(index.body).toContain('id="monitor-status-distribution"');
+    expect(index.body).toContain('id="monitor-alerts"');
+    expect(index.body).toContain('id="monitor-activity"');
+    expect(index.body).toContain('id="monitor-recent"');
     expect(index.body).toContain('href="/console/styles.css"');
     expect(index.body).not.toContain("127.0.0.1:3000/api/chat");
 
@@ -49,11 +56,20 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain("Não executada: ");
     expect(script.body).toContain("Entrada resolvida utilizada:");
     expect(script.body).toContain('function askWorkflowStatus(id)');
+    expect(script.body).toContain('api("/api/monitoring/overview?limit="');
+    expect(script.body).toContain("function renderMonitoring(snapshot)");
+    expect(script.body).toContain("monitorStatuses.forEach(status =>");
+    expect(script.body).toContain("monitorStepStatuses.forEach(status =>");
+    expect(script.body).toContain("openMonitoredWorkflow(alert.workflowId)");
+    expect(script.body).toContain("function monitorDuration(ms)");
     expect(script.body).toContain("result?.workflowReport");
 
     const stylesheet = await app.inject({ method: "GET", url: "/console/styles.css" });
     expect(stylesheet.statusCode).toBe(200);
     expect(stylesheet.headers["content-type"]).toContain("text/css");
+    expect(stylesheet.body).toContain(".monitor-bar-track");
+    expect(stylesheet.body).toContain(".monitor-alert.critical");
+    expect(stylesheet.body).toContain(".monitor-recent-grid");
 
     for (const response of [index, script, stylesheet]) {
       expect(response.headers["cache-control"]).toBe("no-store");

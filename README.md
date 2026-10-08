@@ -618,3 +618,58 @@ mas **não constituem uma trilha de auditoria imutável ou à prova de adultera�
 Para aplicações financeiras, automação física ou integrações externas, serão
 necessários logs separados, controle de acesso granular, retenção, evidências
 de execução e mecanismos de idempotência.
+
+
+### CORTEX v7 — Central de Monitoramento
+
+A aba **Monitoramento** do `/console` centraliza a situação operacional dos
+workflows do usuário do servidor. Os indicadores são **calculados no momento
+da consulta** a partir dos workflows persistidos, e **não** executam
+ferramentas, alterações de estado, aprovações ou chamadas ao LLM.
+
+**Indicadores apresentados:**
+
+- Total de workflows amostrados, finalizados (incluindo os recuperados),
+  porcentagem finalizada **dentro da amostra** e quantos exigem atenção;
+- Distribuição de workflows por estado atual, separando falhas confirmadas,
+  execução de resultado incerto, aprovações e recuperação supervisionada;
+- Contagem de etapas `COMPLETED`, `SKIPPED`, `FAILED`, `PENDING`,
+  `RUNNING` e `WAITING_APPROVAL`;
+- Tempo médio por etapa **concluída ou com falha**, apenas quando os
+  timestamps de início/fim são válidos e a duração não é negativa nem
+  supera sete dias. O painel indica o tamanho desta subamostra;
+- Lista priorizada de workflows que exigem intervenção, com explicação
+  determinística e indicação de próxima ação;
+- Eventos recentes da trilha v6 e atalhos para abrir detalhes dos workflows.
+
+**Escopo correto dos números:** a consulta retorna os **20, 50 ou 100
+workflows mais recentemente atualizados** do usuário configurado no servidor.
+Esse recorte **não representa um total histórico**, um sucesso mensal,
+uma taxa de falhas por período ou um monitoramento contínuo. O percentual
+de workflows finalizados conta os estados `COMPLETED` e
+`COMPLETED_WITH_FAILURES`; portanto, não deve ser interpretado como uma
+taxa de sucesso sem falhas.
+
+A API autenticada por Bearer (quando configurado) usa a identidade do
+servidor e aceita apenas limites de 1 a 100:
+
+```http
+GET /api/monitoring/overview
+GET /api/monitoring/overview?limit=20
+GET /api/monitoring/overview?limit=100
+```
+
+Retorna `scope`, `generatedAt`, `readOnly: true`, `statusCounts`,
+`metrics`, `alerts` (até 12), `activity` (até 16) e `recent`
+(até 12). `scope.isAllTime` sempre é `false`. Atividades v6 antigas
+podem estar ausentes em workflows anteriores à implantação da linha do
+tempo; não são inventados eventos retrospectivos.
+
+O resultado de monitoramento **não transmite** entradas, saídas, erros
+textuais detalhados, identificadores de aprovação, notas de recuperação,
+credenciais nem `userId`. As consultas não alteram a versão do workflow.
+A página oferece atualização manual e também atualiza seus indicadores
+pelo botão global `Atualizar`. Não há sondagem recorrente em segundo plano,
+alertas por e-mail ou métricas históricas agregadas nesta etapa.
+
+**Validação:** `npm run typecheck && npm test && npm run build`.

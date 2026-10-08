@@ -15,6 +15,7 @@
     <div class="nav-caption">NAVEGAÇÃO</div>
     <nav aria-label="Navegação">
       <button class="nav-button active" data-tab="overview">◈ <span>Visão geral</span></button>
+      <button class="nav-button" data-tab="monitoring">▥ <span>Monitoramento</span></button>
       <button class="nav-button" data-tab="chat">✦ <span>NEURON Chat</span></button>
       <button class="nav-button" data-tab="workflows">⬡ <span>Workflows v2</span></button>
       <button class="nav-button" data-tab="tasks">▤ <span>Tarefas</span></button>
@@ -32,7 +33,7 @@
         <div class="section-caption">STATUS DO AMBIENTE</div>
         <div class="metrics">
           <div class="metric"><small>API CORTEX</small><strong id="stat-health">—</strong><span id="stat-health-hint">Não verificado</span></div>
-          <div class="metric"><small>WORKFLOWS</small><strong id="stat-workflows">—</strong><span>Fluxos registrados</span></div>
+          <div class="metric"><small>WORKFLOWS</small><strong id="stat-workflows">—</strong><span>Últimos 30 fluxos</span></div>
           <div class="metric"><small>TAREFAS</small><strong id="stat-tasks">—</strong><span>Planos persistidos</span></div>
           <div class="metric"><small>FERRAMENTAS</small><strong id="stat-tools">—</strong><span>Recursos conectados</span></div>
         </div>
@@ -54,6 +55,63 @@
             <div class="tip">🔒 Mantenha a porta 3000 do Codespaces como <strong>Privada</strong>.</div>
           </article>
         </div>
+      </section>
+
+      <section class="panel" data-panel="monitoring" hidden>
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">OBSERVABILITY / CORTEX V7</div>
+            <h1>Central de <span>monitoramento.</span></h1>
+            <p>Indicadores calculados a partir do estado atual dos workflows, sem executar ferramentas.</p>
+          </div>
+          <button id="refresh-monitoring" type="button" class="btn btn-outline">↻ Atualizar indicadores</button>
+        </div>
+        <article class="card monitoring-scope">
+          <div>
+            <strong>Janela de análise: workflows recentes</strong>
+            <p class="hint" id="monitor-scope">Aguardando consulta. Indicadores não representam o histórico completo.</p>
+          </div>
+          <label class="monitor-limit-label" for="monitor-limit">Consultar os últimos
+            <select id="monitor-limit">
+              <option value="20">20</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+        </article>
+        <div class="metrics monitoring-metrics" aria-label="Indicadores dos workflows recentes">
+          <div class="metric"><small>WORKFLOWS ANALISADOS</small><strong id="monitor-total">—</strong><span>Amostra limitada aos mais recentes</span></div>
+          <div class="metric"><small>FINALIZADOS</small><strong id="monitor-completed">—</strong><span id="monitor-completed-hint">Inclui recuperações concluídas</span></div>
+          <div class="metric"><small>REQUEREM ATENÇÃO</small><strong id="monitor-attention">—</strong><span id="monitor-critical-hint">Dentre os consultados</span></div>
+          <div class="metric"><small>TEMPO MÉDIO POR ETAPA</small><strong id="monitor-duration">—</strong><span id="monitor-duration-hint">Somente etapas com timestamps válidos</span></div>
+        </div>
+        <div class="columns monitoring-columns">
+          <article class="card">
+            <div class="card-head"><h2>Distribuição por estado</h2><span class="overline">STATUS ATUAL</span></div>
+            <div id="monitor-status-distribution" class="monitor-bars" aria-label="Quantidades por estado"></div>
+            <p class="hint">Cada workflow é contado uma vez pelo seu estado atual, não por cada execução.</p>
+          </article>
+          <article class="card">
+            <div class="card-head"><h2>Etapas contabilizadas</h2><span class="overline">SNAPSHOT</span></div>
+            <div id="monitor-step-counts" class="monitor-steps"></div>
+            <p class="hint">Etapas ignoradas e com falha não são tratadas como execuções bem-sucedidas.</p>
+          </article>
+        </div>
+        <div class="columns monitoring-columns">
+          <article class="card">
+            <div class="card-head"><h2>Necessitam intervenção</h2><span class="overline">PRIORIDADE</span></div>
+            <div id="monitor-alerts" class="monitor-list" aria-live="polite"></div>
+          </article>
+          <article class="card">
+            <div class="card-head"><h2>Atividade recente</h2><span class="overline">EVENTOS</span></div>
+            <div id="monitor-activity" class="monitor-list"></div>
+            <p class="hint">Eventos de workflows antigos podem não estar disponíveis. A trilha não contém parâmetros ou resultados de ferramentas.</p>
+          </article>
+        </div>
+        <article class="card">
+          <div class="card-head"><h2>Workflows recentes</h2><span class="overline">ABRIR DETALHES</span></div>
+          <div id="monitor-recent" class="monitor-recent-grid"></div>
+        </article>
       </section>
 
       <section class="panel" data-panel="chat" hidden>

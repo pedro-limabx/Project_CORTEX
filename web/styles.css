@@ -195,3 +195,37 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 .workflow-diagnostics { margin-top:14px;border-top:1px solid #2c3a4b;padding-top:12px }
 .workflow-diagnostics:empty { display:none }
 .diagnostic-label { font-size:12px;font-weight:750;color:#92d2e8;letter-spacing:.03em }
+
+/* CORTEX v7 monitoring — scoped counters, statuses and actionable reports */
+.monitoring-scope { display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:20px }
+.monitoring-scope p { margin:5px 0 0 }
+.monitor-limit-label { display:flex;align-items:center;gap:9px;color:var(--muted);font-size:12px;white-space:nowrap }
+.monitor-limit-label select { width:82px;min-width:0;padding:8px 10px }
+.monitoring-metrics { margin-bottom:20px }
+.monitoring-columns { margin-bottom:20px }
+.monitor-bars { display:grid;gap:13px }
+.monitor-bar-row { display:grid;gap:5px }
+.monitor-bar-head { display:flex;justify-content:space-between;gap:10px;font-size:12px }
+.monitor-bar-head span { color:#b8cad7 }
+.monitor-bar-head strong { font-variant-numeric:tabular-nums }
+.monitor-bar-track { height:8px;background:#223145;overflow:hidden;border-radius:50px }
+.monitor-bar-fill { height:100%;background:#69a9d5;border-radius:50px }
+.monitor-bar-fill.completed,.monitor-bar-fill.completed_with_failures { background:#60ce9c }
+.monitor-bar-fill.failed,.monitor-bar-fill.needs_reconciliation { background:#e68d91 }
+.monitor-bar-fill.recovery_required,.monitor-bar-fill.awaiting_approval { background:#f3b96b }
+.monitor-bar-fill.recovering { background:#9fa7f6 }
+.monitor-steps { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px }
+.monitor-step-count { display:flex;justify-content:space-between;align-items:center;gap:8px;padding:13px 11px;border:1px solid var(--border);background:var(--surface2);border-radius:10px }
+.monitor-step-count strong { font-size:20px;font-variant-numeric:tabular-nums }
+.monitor-list { display:grid;gap:10px;max-height:500px;overflow:auto;align-content:start }
+.monitor-alert,.monitor-activity-item,.monitor-recent-item { border:1px solid var(--border);border-radius:12px;padding:13px;background:#111d2b;overflow-wrap:anywhere }
+.monitor-alert.critical { border-left:3px solid #eb9298 }
+.monitor-alert.attention { border-left:3px solid #efc17d }
+.monitor-alert .row-head,.monitor-recent-item .row-head { display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px }
+.monitor-alert p,.monitor-activity-item p,.monitor-recent-item p { margin:8px 0 }
+.monitor-alert button,.monitor-activity-item button,.monitor-recent-item button { margin-top:6px }
+.monitor-recent-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px }
+@media (max-width:850px) {
+  .monitor-recent-grid,.monitor-steps { grid-template-columns:1fr }
+  .monitor-limit-label { white-space:normal }
+}
