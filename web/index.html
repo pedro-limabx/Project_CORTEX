@@ -1,1 +1,120 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CORTEX — NEURON</title><style>body{font-family:system-ui,sans-serif;margin:0;background:#0b0d10;color:#f5f7fa}main{max-width:900px;margin:auto;padding:48px 20px}.card{background:#151922;border:1px solid #272d38;border-radius:16px;padding:24px}h1{margin:0 0 8px}.muted{color:#9da6b5}#chat{min-height:320px;white-space:pre-wrap;border:1px solid #272d38;border-radius:12px;padding:16px;margin:16px 0;overflow:auto}form{display:flex;gap:10px}input{flex:1;background:#0e1117;color:#fff;border:1px solid #303746;border-radius:10px;padding:13px}button{background:#f5f7fa;color:#0b0d10;border:0;border-radius:10px;padding:13px 18px;font-weight:700;cursor:pointer}</style></head><body><main><div class="card"><h1>CORTEX / NEURON</h1><p class="muted">Interface experimental v0.1</p><div id="chat"></div><form id="form"><input id="message" placeholder="Fale com a NEURON..." autocomplete="off"><button>Enviar</button></form></div></main><script>const chat=document.querySelector("#chat"),form=document.querySelector("#form"),input=document.querySelector("#message");function add(a,b){chat.textContent+=a+": "+b+"\n\n";chat.scrollTop=chat.scrollHeight}form.addEventListener("submit",async e=>{e.preventDefault();const message=input.value.trim();if(!message)return;input.value="";add("VOCÊ",message);try{const r=await fetch("http://127.0.0.1:3000/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:"local-user",message})});const d=await r.json();add("NEURON",d.text||d.error||"Erro")}catch{add("SISTEMA","Não foi possível conectar à NEURON.")}});</script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>CORTEX — Laboratório NEURON</title>
+  <link rel="stylesheet" href="/console/styles.css">
+  <script src="/console/app.js" defer></script>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-icon">✦</div><div><strong>CORTEX</strong><small>LABORATÓRIO OPERACIONAL</small></div></div>
+    <div class="nav-caption">NAVEGAÇÃO</div>
+    <nav aria-label="Navegação">
+      <button class="nav-button active" data-tab="overview">◈ <span>Visão geral</span></button>
+      <button class="nav-button" data-tab="chat">✦ <span>NEURON Chat</span></button>
+      <button class="nav-button" data-tab="workflows">⬡ <span>Workflows v2</span></button>
+      <button class="nav-button" data-tab="tasks">▤ <span>Tarefas</span></button>
+      <button class="nav-button" data-tab="tools">⌘ <span>Ferramentas</span></button>
+    </nav>
+    <div class="sidebar-bottom"><div class="side-status"><span class="live-dot"></span> AMBIENTE DE TESTES</div><p>Execução supervisionada. Nenhuma ferramenta é executada sem um comando seu.</p><small>CORTEX / NEURON · PREVIEW</small></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div class="breadcrumbs">CORTEX <span>/</span> <strong id="page-name">Visão geral</strong></div><div class="top-controls"><span id="connection" class="connection offline">● Desconectado</span><button class="btn btn-ghost" id="refresh" type="button">↻ Atualizar</button></div></header>
+    <main class="main">
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <section class="panel" data-panel="overview">
+        <div class="hero"><div class="eyebrow">NEURON CORE / ENVIRONMENT</div><h1>Seu laboratório <span>CORTEX.</span></h1><p>Um espaço para conversar com a inteligência central, simular ferramentas e orquestrar processos com dependências — tudo usando a API real do projeto.</p><div class="hero-actions"><button class="btn btn-primary" data-tab="chat">Abrir NEURON ↗</button><button class="btn btn-outline" data-tab="workflows">Testar workflows</button></div><div class="hero-orb" aria-hidden="true"></div></div>
+        <div class="section-caption">STATUS DO AMBIENTE</div>
+        <div class="metrics">
+          <div class="metric"><small>API CORTEX</small><strong id="stat-health">—</strong><span id="stat-health-hint">Não verificado</span></div>
+          <div class="metric"><small>WORKFLOWS</small><strong id="stat-workflows">—</strong><span>Fluxos registrados</span></div>
+          <div class="metric"><small>TAREFAS</small><strong id="stat-tasks">—</strong><span>Planos persistidos</span></div>
+          <div class="metric"><small>FERRAMENTAS</small><strong id="stat-tools">—</strong><span>Recursos conectados</span></div>
+        </div>
+        <div class="columns">
+          <article class="card">
+            <div class="card-head"><h2>Primeiros passos</h2><span class="overline">QUICK START</span></div>
+            <div class="guide">
+              <div><span class="number">01</span><div><strong>Conecte-se à API</strong><p>Informe um token Bearer apenas se estiver configurado no servidor.</p></div></div>
+              <div><span class="number">02</span><div><strong>Teste o NEURON</strong><p>Converse com a inteligência central e inspecione cada resultado.</p></div></div>
+              <div><span class="number">03</span><div><strong>Orquestre um processo</strong><p>Crie um workflow com um exemplo pronto e avance etapa por etapa.</p></div></div>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-head"><h2>Configuração da sessão</h2><span class="overline">ACESSO</span></div>
+            <label class="field-label" for="token">Token Bearer (se configurado)</label>
+            <input id="token" type="password" spellcheck="false" autocomplete="off" placeholder="CORTEX_API_TOKEN">
+            <div class="actions"><button class="btn btn-primary" type="button" id="use-token">Conectar</button><button class="btn btn-ghost" type="button" id="clear-token">Limpar token</button></div>
+            <p class="hint">O token fica somente na memória desta aba. Não insira aqui a chave da OpenAI.</p>
+            <div class="tip">🔒 Mantenha a porta 3000 do Codespaces como <strong>Privada</strong>.</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="chat" hidden>
+        <div class="page-heading"><div><div class="eyebrow">AGENT / LIVE TEST</div><h1>NEURON <span>Chat.</span></h1><p>Envie mensagens ao agente e observe chamadas de ferramentas, plano e status.</p></div><code>/api/chat</code></div>
+        <div class="columns chat-columns">
+          <article class="card chat-card">
+            <div class="card-head"><h2>Conversa</h2><span class="overline">CHAT ATIVO</span></div>
+            <div id="chat-history" class="conversation" aria-live="polite"><div class="placeholder">✦<strong>NEURON aguarda seu comando</strong><p>Exemplo: “Calcule 25 vezes 18”</p></div></div>
+            <form id="chat-form"><label class="sr-only" for="message">Mensagem</label><textarea id="message" required maxlength="4000" rows="3" placeholder="Digite sua mensagem para o NEURON..."></textarea><div class="compose-bottom"><label class="check"><input id="dry-run" type="checkbox"> Simular (dry-run)</label><button type="submit" class="btn btn-primary">Enviar ↗</button></div></form>
+          </article>
+          <article class="card">
+            <div class="card-head"><h2>Inspeção</h2><span class="overline">RESULTADOS</span></div>
+            <div id="chat-inspect" class="blank">Envie uma mensagem para ver os resultados e a atividade do agente.</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="workflows" hidden>
+        <div class="page-heading"><div><div class="eyebrow">ORCHESTRATION / V2</div><h1>Workflows <span>v2.</span></h1><p>Construa tarefas com dependências e avance cada etapa manualmente.</p></div><code>SUPERVISIONADO</code></div>
+        <div class="columns workflow-columns">
+          <article class="card">
+            <div class="card-head"><h2>Novo workflow</h2><span class="overline">EDITOR</span></div>
+            <label class="field-label" for="preset">Modelo inicial</label>
+            <select id="preset">
+              <option value="chain">Dois cálculos em sequência</option>
+              <option value="fork">Cálculos independentes + dependência conjunta</option>
+              <option value="invalid">Grafo inválido (para testar validação)</option>
+            </select>
+            <label class="field-label" for="workflow-json">Definição JSON</label>
+            <textarea id="workflow-json" class="code-editor" spellcheck="false" rows="17"></textarea>
+            <p class="hint">Use ferramentas que aparecem na aba Ferramentas. A API valida dependências, tipos e ciclos.</p>
+            <div class="actions"><button id="create-workflow" type="button" class="btn btn-primary">+ Criar workflow</button><button id="reset-example" type="button" class="btn btn-ghost">Restaurar</button></div>
+          </article>
+          <div class="stack">
+            <article class="card">
+              <div class="card-head"><h2>Seus workflows</h2><button id="refresh-workflows" type="button" class="btn btn-ghost small">↻ Atualizar</button></div>
+              <div id="workflow-list" class="resource-list"><div class="blank">Nenhum workflow carregado.</div></div>
+            </article>
+            <article class="card">
+              <div class="card-head"><h2>Execução selecionada</h2><span class="overline">PROGRESSO</span></div>
+              <div id="workflow-detail" class="blank">Selecione um workflow para examinar ou executar seus passos.</div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="tasks" hidden>
+        <div class="page-heading"><div><div class="eyebrow">PERSISTENT MEMORY</div><h1>Tarefas <span>salvas.</span></h1><p>Acompanhe planos do NEURON e retome uma tarefa incompleta.</p></div><code>/api/tasks</code></div>
+        <div class="columns">
+          <article class="card"><div class="card-head"><h2>Histórico</h2><button id="refresh-tasks" class="btn btn-ghost small">↻ Atualizar</button></div><div id="task-list" class="resource-list"><div class="blank">Nenhuma tarefa carregada.</div></div></article>
+          <article class="card"><div class="card-head"><h2>Detalhe</h2><span class="overline">PLANO</span></div><div id="task-detail" class="blank">Selecione uma tarefa para inspecionar as etapas.</div></article>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="tools" hidden>
+        <div class="page-heading"><div><div class="eyebrow">CAPABILITY REGISTRY</div><h1>Ferramentas <span>ativas.</span></h1><p>Consulte ferramentas, níveis de risco e permissões do ambiente.</p></div><button id="refresh-tools" class="btn btn-outline">↻ Atualizar catálogo</button></div>
+        <div id="tools-list" class="tools-grid"><div class="blank">Nenhuma ferramenta carregada.</div></div>
+      </section>
+    </main>
+    <footer class="footer"><span>CORTEX LABORATORY · EXPERIMENTAL</span><span>O navegador nunca recebe a chave do provedor de IA</span></footer>
+  </div>
+</div>
+</body>
+</html>
