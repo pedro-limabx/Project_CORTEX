@@ -256,3 +256,37 @@ O Codespaces fornece uma URL web de testes enquanto o processo e o Codespace
 estão ativos, mas **não é uma hospedagem permanente**. A porta deve continuar
 privada. Para exposição pública será necessário reforçar autenticação,
 limites de uso e proteção contra abuso.
+
+
+### NEURON — proposta de workflows por linguagem natural
+
+A API agora aceita a descrição de um processo e retorna um **rascunho
+validado**, sem criar tarefa, solicitar aprovação ou executar ferramenta:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/workflows/propose \
+  -H 'Content-Type: application/json' \
+  -d '{"objective":"Calcule 25*18 e depois 450/3"}'
+```
+
+Resposta: `definition` (JSON editável com as etapas), `source`,
+`needsReview=true`, `saved=false`, `executed=false`, `warnings`
+e `message`.
+
+No **Console /console → Workflows v2**, digite o objetivo e clique em
+**Gerar proposta (não executa)**. O resultado é colocado no editor JSON.
+Depois de revisar os passos e os parâmetros, **Criar workflow** grava o
+processo, mas ainda não executa ferramentas. Cada chamada de **Avançar
+etapa** executa no máximo um passo, respeitando as aprovações de risco.
+
+- Com `LOCAL_TEST_MODE=true`, o gerador usa exclusivamente um **modo
+  demonstrativo determinístico de expressões aritméticas** e informa que
+  não compreende tarefas livres; não finge ser um LLM.
+- Com `LOCAL_TEST_MODE=false` e provedor configurado, o NEURON solicita
+  ao modelo um grafo em JSON sem fornecer chamadas de ferramenta.
+- O CORTEX verifica ferramentas existentes, schemas de entrada,
+  identificadores e dependências; planos inválidos são recusados.
+- A versão atual **não oferece substituição dinâmica de resultados entre
+  passos**: cada entrada precisa estar definida antes da execução.
+- Rascunhos gerados não substituem a revisão humana. Operações de
+  alto risco continuam bloqueadas pelas políticas de permissão/aprovação.
