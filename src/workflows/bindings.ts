@@ -143,7 +143,12 @@ function containsBindings(value: unknown, depth: number): boolean {
   return false;
 }
 
-function outputAt(run: WorkflowRun, source: string, path: string): unknown {
+export function readStepOutput(
+  run: WorkflowRun,
+  source: string,
+  path: string,
+  allowNull = false
+): unknown {
   const previous = run.steps.find(step => step.id === source);
   if (!previous || previous.status !== "COMPLETED" || previous.output === undefined) {
     throw new WorkflowInputError("Referenced output is unavailable: " + source);
@@ -156,7 +161,7 @@ function outputAt(run: WorkflowRun, source: string, path: string): unknown {
     }
     value = (value as Record<string, unknown>)[segment];
   }
-  if (value === undefined || value === null) {
+  if (value === undefined || (value === null && !allowNull)) {
     throw new WorkflowInputError("Referenced output path is empty: " + source + "." + path);
   }
   return value;
@@ -171,7 +176,7 @@ export function resolveStepInput(
   const safe = jsonSafe(step.input, MAX_JSON_BYTES);
   const resolved = walk(
     safe, step.id, step.dependsOn,
-    (source, path) => outputAt(run, source, path),
+    (source, path) => readStepOutput(run, source, path),
     0
   );
   return jsonSafe(resolved, MAX_RESOLVED_BYTES);
