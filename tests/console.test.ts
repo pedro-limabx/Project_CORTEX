@@ -30,6 +30,9 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain('id="alerts-list"');
     expect(index.body).toContain('id="alerts-view"');
     expect(index.body).toContain('id="alerts-limit"');
+    expect(index.body).toContain('id="alerts-watch-toggle"');
+    expect(index.body).toContain('id="alerts-browser-toggle"');
+    expect(index.body).toContain('id="alerts-watch-status"');
     expect(index.body).toContain('id="refresh-alerts"');
     expect(index.body).toContain('id="monitor-scope"');
     expect(index.body).toContain('id="monitor-limit"');
@@ -66,6 +69,11 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain('"/api/alerts?limit="');
     expect(script.body).toContain('api("/api/alerts/acknowledge"');
     expect(script.body).toContain("function renderAlerts(snapshot)");
+    expect(script.body).toContain("function selectNewOperationalAlerts(snapshot, known, hasBaseline)");
+    expect(script.body).toContain("function notifyNewOperationalAlerts(alerts)");
+    expect(script.body).toContain("60000");
+    expect(script.body).toContain("Notification.requestPermission()");
+    expect(script.body).toContain("alertWatchTimer === null");
     expect(script.body).toContain("alertMessageForManualShare(alert)");
     expect(script.body).toContain('confirmed: true');
     expect(script.body).toContain('Copiar aviso (não envia)');
@@ -265,6 +273,85 @@ describe("CORTEX web console", () => {
     expect(preview).not.toContain("DO_NOT_SHARE_INPUT");
     expect(preview).not.toContain("DO_NOT_SHARE_OUTPUT");
     expect(preview).toContain("preparado manualmente");
+  });
+
+  it("establishes a silent alert baseline, then deduplicates new versions", async () => {
+    const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
+    const start = source.indexOf("function operationalAlertKey(alert) {");
+    const end = source.indexOf("function updateAlertWatchControls()", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+
+    type Alert = { workflowId: string; version: number; status: string; acknowledged: boolean };
+    const choose = runInNewContext(
+      source.slice(start, end) + "\nselectNewOperationalAlerts;",
+      {}
+    ) as (snapshot: { alerts: Alert[] }, known: Set<string>, baseline: boolean) => Alert[];
+
+    const first: Alert = {
+      workflowId: "first", version: 1, status: "FAILED", acknowledged: false
+    };
+    const second: Alert = {
+      workflowId: "second", version: 1, status: "RECOVERY_REQUIRED", acknowledged: false
+    };
+    const known = new Set<string>();
+
+    expect(choose({ alerts: [first] }, known, false)).toHaveLength(0);
+    expect(known.has("first:1:FAILED")).toBe(true);
+    expect(choose({ alerts: [first] }, known, true)).toHaveLength(0);
+    expect(choose({ alerts: [first, second] }, known, true)).toHaveLength(1);
+    expect(choose({ alerts: [first, second] }, known, true)).toHaveLength(0);
+    expect(choose({ alerts: [{ ...first, version: 2 }] }, known, true)).toHaveLength(1);
+    expect(choose({ alerts: [{ ...second, version: 2, acknowledged: true }] },
+      known, true)).toHaveLength(0);
+  });
+
+  it("does not send desktop notices without explicit opt-in and hides sensitive text", async () => {
+    const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
+    const start = source.indexOf("function notifyNewOperationalAlerts(alerts) {");
+    const end = source.indexOf("async function loadAlerts()", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+
+    const notifications: Array<{ title: string; body: string }> = [];
+    class NotificationMock {
+      static permission = "granted";
+      onclick: (() => void) | null = null;
+      constructor(title: string, options: { body: string }) {
+        notifications.push({ title, body: options.body });
+      }
+      close() {}
+    }
+    const browser = { Notification: NotificationMock, focus: vi.fn() };
+    const sandbox = {
+      window: browser, browserAlertsEnabled: false,
+      alertWatchTimer: null as number | null, tab: vi.fn()
+    };
+    const notify = runInNewContext(
+      source.slice(start, end) + "\nnotifyNewOperationalAlerts;",
+      sandbox
+    ) as (alerts: Array<Record<string, unknown>>) => void;
+    const alert = {
+      workflowId: "private-workflow", objective: "private-customer-name",
+      severity: "critical", status: "FAILED"
+    };
+
+    notify([alert]);
+    expect(notifications).toHaveLength(0);
+    sandbox.browserAlertsEnabled = true;
+    notify([alert]); // Permission alone cannot start watching.
+    expect(notifications).toHaveLength(0);
+    sandbox.alertWatchTimer = 1;
+    NotificationMock.permission = "denied";
+    notify([alert]);
+    expect(notifications).toHaveLength(0);
+
+    NotificationMock.permission = "granted";
+    notify([alert]);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]?.body).not.toContain("private-workflow");
+    expect(notifications[0]?.body).not.toContain("private-customer-name");
+    expect(notifications[0]?.body).toContain("verificado");
   });
 
   it("ships parseable JavaScript without embedding server secrets or local URL assumptions", async () => {

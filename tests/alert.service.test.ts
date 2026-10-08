@@ -104,6 +104,29 @@ describe("CORTEX v8 supervised alert inbox", () => {
     expect(empty.alerts).toEqual([]);
   });
 
+  it("does not flag a newly started tool as uncertain before the 30-second grace period", async () => {
+    const store = new InMemoryWorkflowStore();
+    const now = Date.parse(T);
+    const recent = makeRun(31, "uncertain");
+    recent.steps[0]!.startedAt = new Date(now - 5_000).toISOString();
+    const almostStale = makeRun(32, "uncertain");
+    almostStale.steps[0]!.startedAt = new Date(now - 29_999).toISOString();
+    const stale = makeRun(33, "uncertain");
+    stale.steps[0]!.startedAt = new Date(now - 30_000).toISOString();
+    const unknownTime = makeRun(34, "uncertain");
+    await Promise.all([recent, almostStale, stale, unknownTime].map(item => store.create(item)));
+    const service = new OperationalAlertService(
+      store, new InMemoryAlertAcknowledgementStore(), () => new Date(T)
+    );
+    const snapshot = await service.inbox("user-a");
+    expect(snapshot.counts).toMatchObject({
+      all: 2, critical: 2, unread: 2
+    });
+    expect(snapshot.alerts.map(item => item.workflowId)).toEqual([id(34), id(33)]);
+    expect(snapshot.alerts.some(item => item.workflowId === id(31))).toBe(false);
+    expect(snapshot.alerts.some(item => item.workflowId === id(32))).toBe(false);
+  });
+
   it("records human acknowledgement without modifying workflow state or granting permissions", async () => {
     const { alerts, store, acknowledgements } = await fixture();
     const saveSpy = vi.spyOn(store, "update");

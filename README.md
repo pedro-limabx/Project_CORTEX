@@ -760,3 +760,49 @@ de alertas como notificação de tempo real: ele é atualizado quando
 o operador acessa o painel ou utiliza os botões de atualização.
 
 Para validar: `npm run typecheck && npm test && npm run build`.
+
+
+### CORTEX v9 — Acompanhamento opcional e avisos do navegador
+
+A v9 aproveita os avisos da v8 e acrescenta dois controles **independentes**
+na aba **Alertas** de `/console`:
+
+1. **Iniciar acompanhamento (60 s)**: atualiza a caixa de alertas e seu
+   contador a cada 60 segundos **somente enquanto esta aba estiver aberta**.
+   Clique em **Parar acompanhamento** para interromper imediatamente.
+2. **Permitir avisos do navegador**: solicita a permissão do navegador
+   exclusivamente a partir de um clique do operador. É preciso **também**
+   ativar o acompanhamento para que novos incidentes produzam avisos.
+   A permissão pode ser revogada nas configurações do navegador.
+
+**Privacidade e prevenção de ruído:** a primeira leitura estabelece uma
+base silenciosa, sem disparar notificações para alertas antigos. As
+consultas subsequentes identificam novas combinações de ID do workflow,
+versão e status. Cada uma é notificada no máximo uma vez por sessão
+e no máximo três alertas são exibidos por consulta. O aviso do navegador
+usa apenas texto genérico: nunca inclui objetivo do workflow, nomes de
+clientes, entradas, resultados ou justificativas do operador. A caixa
+interna continua contendo os detalhes autorizados.
+
+**Execução recente:** ao montar a caixa de alertas, a v9 não classifica
+automaticamente como execução incerta uma etapa em estado `RUNNING`
+com horário de início válido há menos de 30 segundos. Se ela permanecer
+assim por 30 segundos ou mais, passa a aparecer como incidente para
+investigação. Um timeout ou outro caso com horário ausente/inválido
+ainda exige verificação. O limite de 30 segundos não comprova falha
+nem autoriza retentativa.
+
+**Limitações importantes:** as verificações são temporizadores do
+navegador e podem ser atrasadas por abas suspensas, políticas do sistema
+e perda de conexão. Com a aba fechada, **não há monitoramento ativo,
+notificações push, e-mails ou SMS**. O servidor continua respondendo
+a consultas e armazenando reconhecimentos da v8, mas não faz
+envios externos. As preferências de acompanhamento e a deduplicação
+ficam apenas na sessão da aba; ao recarregar, é preciso ativar novamente.
+Não existe integração com credenciais de e-mail ou mensageria.
+
+O reconhecimento de um aviso permanece estritamente informativo:
+não altera o workflow e não substitui investigação, autorização,
+reconciliação ou execução humana.
+
+Validação: `npm run typecheck && npm test && npm run build`.

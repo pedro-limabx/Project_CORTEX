@@ -195,12 +195,85 @@ async function loadMonitoring() {
   renderMonitoring(result);
 }
 
+// CORTEX v9: opt-in, tab-local polling. The server does not schedule or
+// dispatch notifications. Browser permission alone does not start polling.
+let alertWatchTimer = null;
+let browserAlertsEnabled = false;
+let alertSnapshotInitialized = false;
+let alertRequest = null;
+const observedAlertKeys = new Set();
+
+function operationalAlertKey(alert) {
+  return alert.workflowId + ":" + alert.version + ":" + alert.status;
+}
+
+// Pure except for the explicitly supplied Set, allowing deterministic tests.
+function selectNewOperationalAlerts(snapshot, known, hasBaseline) {
+  const current = snapshot.alerts.filter(alert => !alert.acknowledged);
+  const fresh = hasBaseline
+    ? current.filter(alert => !known.has(operationalAlertKey(alert)))
+    : [];
+  snapshot.alerts.forEach(alert => known.add(operationalAlertKey(alert)));
+  // Bound the page-local deduplication state.
+  while (known.size > 500) known.delete(known.values().next().value);
+  return fresh.slice(0, 3);
+}
+
+function updateAlertWatchControls() {
+  $("#alerts-watch-toggle").textContent = alertWatchTimer === null
+    ? "Iniciar acompanhamento (60 s)" : "Parar acompanhamento";
+  $("#alerts-browser-toggle").textContent = browserAlertsEnabled
+    ? "Desativar avisos do navegador" : "Permitir avisos do navegador";
+  $("#alerts-watch-status").textContent = alertWatchTimer === null
+    ? "Acompanhamento automático desligado. Você ainda pode consultar os alertas manualmente."
+    : "Atualização nesta aba a cada 60 segundos. Avisos do navegador "
+      + (browserAlertsEnabled ? "ativados." : "desativados.");
+}
+
+function notifyNewOperationalAlerts(alerts) {
+  if (!browserAlertsEnabled || alertWatchTimer === null ||
+      !("Notification" in window) || window.Notification.permission !== "granted") return;
+  for (const alert of alerts) {
+    try {
+      // Intentionally generic: OS notifications can be visible on a lock screen.
+      const notification = new window.Notification("CORTEX · Novo alerta operacional", {
+        body: alert.severity === "critical"
+          ? "Há um problema que precisa ser verificado. Abra a Central de Alertas."
+          : "Um workflow requer atenção. Abra a Central de Alertas.",
+        tag: "cortex-" + alert.status
+      });
+      notification.onclick = () => {
+        window.focus();
+        tab("alerts");
+        notification.close();
+      };
+    } catch {
+      // Ignore notification UI failures. The in-app inbox remains available.
+    }
+  }
+}
+
 async function loadAlerts() {
-  const path = "/api/alerts?limit=" + state.alertsLimit
-    + "&view=" + encodeURIComponent(state.alertsView);
-  const result = await api(path);
-  state.alerts = result;
-  renderAlerts(result);
+  if (alertRequest) return alertRequest;
+  const task = (async () => {
+    const path = "/api/alerts?limit=" + state.alertsLimit
+      + "&view=" + encodeURIComponent(state.alertsView);
+    const result = await api(path);
+    const fresh = selectNewOperationalAlerts(
+      result, observedAlertKeys, alertSnapshotInitialized
+    );
+    alertSnapshotInitialized = true;
+    state.alerts = result;
+    renderAlerts(result);
+    notifyNewOperationalAlerts(fresh);
+    return result;
+  })();
+  alertRequest = task;
+  try {
+    return await task;
+  } finally {
+    alertRequest = null;
+  }
 }
 
 async function refreshAll() {
@@ -446,6 +519,47 @@ $("#alerts-view").addEventListener("change", event => {
   state.alertsView = event.currentTarget.value;
   void action(loadAlerts);
 });
+
+$("#alerts-watch-toggle").addEventListener("click", event => action(async () => {
+  if (alertWatchTimer !== null) {
+    window.clearInterval(alertWatchTimer);
+    alertWatchTimer = null;
+    updateAlertWatchControls();
+    return;
+  }
+  // Obtain a baseline before polling, so old incidents never trigger a
+  // burst of browser notifications just because the user enabled watching.
+  await loadAlerts();
+  alertWatchTimer = window.setInterval(() => {
+    void loadAlerts().catch(error => {
+      showNotice("Não foi possível atualizar os alertas: " +
+        (error instanceof Error ? error.message : "erro desconhecido"), "error");
+    });
+  }, 60000);
+  updateAlertWatchControls();
+}, event.currentTarget));
+
+$("#alerts-browser-toggle").addEventListener("click", event => action(async () => {
+  if (browserAlertsEnabled) {
+    browserAlertsEnabled = false;
+    updateAlertWatchControls();
+    return;
+  }
+  if (!("Notification" in window)) {
+    showNotice("Este navegador não oferece notificações locais.", "error");
+    return;
+  }
+  // Request browser permission only as a direct consequence of a click.
+  const permission = await window.Notification.requestPermission();
+  if (permission !== "granted") {
+    showNotice("Notificações não autorizadas. A caixa de alertas continua disponível.");
+    return;
+  }
+  browserAlertsEnabled = true;
+  updateAlertWatchControls();
+  showNotice("Permissão concedida nesta aba. Ative o acompanhamento para receber novos avisos.", "success");
+}, event.currentTarget));
+updateAlertWatchControls();
 
 // NEURON Chat
 function addMessage(who, value, fromUser = false) {

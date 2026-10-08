@@ -248,3 +248,11 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
   .alerts-controls { width:100%;justify-content:flex-start }
   .alerts-controls label { flex:1;min-width:125px }
 }
+
+/* CORTEX v9: opt-in, session-only alert checks and browser notifications. */
+.alert-watch-controls { display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border) }
+.alert-watch-controls #alerts-watch-status { width:100%;margin:0;line-height:1.6 }
+.alert-watch-controls .btn { max-width:100%;white-space:normal }
+@media (max-width:640px) {
+  .alert-watch-controls { flex-direction:column;align-items:stretch }
+}

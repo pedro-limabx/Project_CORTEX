@@ -144,6 +144,13 @@
               </select>
             </label>
           </div>
+          <div class="alert-watch-controls">
+            <button id="alerts-watch-toggle" class="btn btn-outline" type="button">Iniciar acompanhamento (60 s)</button>
+            <button id="alerts-browser-toggle" class="btn btn-ghost" type="button">Permitir avisos do navegador</button>
+            <p id="alerts-watch-status" class="hint" role="status" aria-live="polite">
+              Acompanhamento automático desligado. Os avisos do navegador exigem sua autorização.
+            </p>
+          </div>
         </article>
         <div class="metrics monitoring-metrics" aria-label="Resumo dos alertas da amostra">
           <div class="metric"><small>AVISOS IDENTIFICADOS</small><strong id="alerts-total">—</strong><span>Na amostra selecionada</span></div>
@@ -156,7 +163,7 @@
           <p class="hint">Marcar um alerta como visto não resolve o problema, não concede permissões e não executa ferramentas. Os avisos voltam a exigir atenção quando a versão do workflow muda.</p>
           <div id="alerts-list" class="alerts-list" aria-live="polite"><div class="blank">Ainda não há alertas carregados.</div></div>
         </article>
-        <div class="tip">As notificações da v8 permanecem dentro do CORTEX. O sistema não envia e-mails ou mensagens externas e não executa verificações em segundo plano.</div>
+        <div class="tip">Na v9, as verificações a cada 60 segundos só são iniciadas por você e funcionam enquanto esta aba estiver aberta. Os avisos do navegador também precisam de permissão explícita. Não há e-mails, SMS, push por servidor nem garantia de entrega com a aba fechada.</div>
       </section>
 
       <section class="panel" data-panel="chat" hidden>

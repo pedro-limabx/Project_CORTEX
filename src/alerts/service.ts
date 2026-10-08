@@ -62,8 +62,18 @@ function severity(status: WorkflowStatus): AlertSeverity {
     ? "critical" : "attention";
 }
 
-function isTracked(status: WorkflowStatus): boolean {
-  return WATCHED_STATUSES.includes(status);
+const RUNNING_GRACE_MS = 30_000;
+
+function isTrackedRun(run: WorkflowRun, now: number): boolean {
+  const status = workflowStatus(run);
+  if (!WATCHED_STATUSES.includes(status)) return false;
+  if (status !== "NEEDS_RECONCILIATION") return true;
+  const running = run.steps.find(step => step.status === "RUNNING");
+  const started = running?.startedAt ? Date.parse(running.startedAt) : NaN;
+  // A tool that has only just started is not necessarily interrupted.
+  // Missing/invalid timestamps remain visible for operator review.
+  return !(Number.isFinite(started) &&
+    now >= started && now - started < RUNNING_GRACE_MS);
 }
 
 function keyOf(run: WorkflowRun): AlertKey {
@@ -120,7 +130,8 @@ export class OperationalAlertService {
     }
 
     const runs = await this.workflows.list(userId, limit);
-    const candidates = runs.filter(run => isTracked(workflowStatus(run)));
+    const generatedAt = this.now().toISOString();
+    const candidates = runs.filter(run => isTrackedRun(run, Date.parse(generatedAt)));
     const alerts = candidates.map(buildAlert);
     const recorded = await this.acknowledgements.listCurrent(
       userId, alerts.map(({ workflowId, version, status }) =>
@@ -147,7 +158,7 @@ export class OperationalAlertService {
         isAllTime: false,
         view
       },
-      generatedAt: this.now().toISOString(),
+      generatedAt,
       readOnly: true,
       delivery: "manual_in_app_only",
       counts: {
