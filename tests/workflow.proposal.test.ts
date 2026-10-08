@@ -83,6 +83,31 @@ describe("NEURON natural-language workflow drafting", () => {
     expect(await store.list("user-a", 10)).toEqual([]);
   });
 
+  it("validates model-proposed conditional routes without persisting or executing them", async () => {
+    const proposal = {
+      objective: "Calcular e escolher um caminho",
+      steps: [
+        { id: "medicao", tool: "calculator.evaluate", input: { expression: "25*18" } },
+        {
+          id: "alto", tool: "calculator.evaluate",
+          input: { expression: "{{steps.medicao.result}}/3" },
+          dependsOn: ["medicao"],
+          when: { step: "medicao", path: "result", operator: "gte", value: 400 }
+        }
+      ]
+    };
+    const { planner, store } = harness({
+      async chat() { return { provider: "mock", text: JSON.stringify(proposal) }; }
+    });
+    const result = await planner.propose("Calcule e escolha conforme o resultado");
+    expect(result.definition.steps[1]).toMatchObject({
+      dependsOn: ["medicao"], when: proposal.steps[1]!.when
+    });
+    expect(result.saved).toBe(false);
+    expect(result.executed).toBe(false);
+    expect(await store.list("user-a", 10)).toEqual([]);
+  });
+
   it("rejects fabricated tools, invalid tool inputs and cyclic plans", async () => {
     const cases = [
       { objective: "fake", steps: [{ id: "a", tool: "tool.nonexistent", input: {} }] },
