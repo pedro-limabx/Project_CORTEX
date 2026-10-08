@@ -169,7 +169,6 @@ export function recoveryAuthorized(run: WorkflowRun, stepId: string): boolean {
 export function workflowStatus(run: WorkflowRun): WorkflowStatus {
   // An ambiguous in-flight effect always takes precedence over historical failures.
   if (run.steps.some(step => step.status === "RUNNING")) return "NEEDS_RECONCILIATION";
-  if (run.steps.some(step => step.status === "WAITING_APPROVAL")) return "AWAITING_APPROVAL";
 
   const failed = run.steps.filter(step => step.status === "FAILED");
   if (failed.length) {
@@ -180,6 +179,9 @@ export function workflowStatus(run: WorkflowRun): WorkflowStatus {
     if (failed.some(source => !recoveryAuthorized(run, source.id))) {
       return "RECOVERY_REQUIRED";
     }
+    if (run.steps.some(step => step.status === "WAITING_APPROVAL")) {
+      return "AWAITING_APPROVAL";
+    }
     if (run.steps.every(step =>
       step.status === "COMPLETED" || step.status === "SKIPPED" || step.status === "FAILED")) {
       return failed.every(source => failedStepHandler(run, source.id)?.status === "COMPLETED")
@@ -187,6 +189,9 @@ export function workflowStatus(run: WorkflowRun): WorkflowStatus {
         : "FAILED";
     }
     return "RECOVERING";
+  }
+  if (run.steps.some(step => step.status === "WAITING_APPROVAL")) {
+    return "AWAITING_APPROVAL";
   }
   if (run.steps.every(step => step.status === "COMPLETED" || step.status === "SKIPPED")) {
     return "COMPLETED";
@@ -217,16 +222,18 @@ export function workflowResponse(run: WorkflowRun) {
   const completed = run.steps.filter(step => step.status === "COMPLETED").length;
   const skipped = run.steps.filter(step => step.status === "SKIPPED").length;
   const failed = run.steps.filter(step => step.status === "FAILED").length;
+  const status = workflowStatus(run);
+  const runnable = status === "ACTIVE" || status === "RECOVERING";
   return {
     ...run,
-    status: workflowStatus(run),
+    status,
     progress: {
       completed,
       skipped,
       failed,
       total: run.steps.length,
       percent: Math.round(100 * (completed + skipped + failed) / run.steps.length),
-      ready: readyWorkflowSteps(run).map(step => step.id)
+      ready: runnable ? readyWorkflowSteps(run).map(step => step.id) : []
     }
   };
 }
