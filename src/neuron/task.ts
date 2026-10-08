@@ -84,10 +84,11 @@ export function reconcileInterruptedPlan(
   } else {
     delete last.error;
   }
+  const { currentStep: _previousStep, ...rest } = plan;
   return {
-    ...plan,
+    ...rest,
     status: outcome === "completed" ? "ACTIVE" : "REPLANNING",
-    currentStep: outcome === "completed" ? undefined : last.index,
+    ...(outcome === "failed" ? { currentStep: last.index } : {}),
     steps
   };
 }
