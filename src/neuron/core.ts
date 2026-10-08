@@ -84,6 +84,7 @@ export class NeuronCore {
     memories: number;
     steps: number;
     toolResults: unknown[];
+    taskId?: string;
     plan: ReturnType<ExecutionPlanner["snapshot"]>;
   }> {
     const requestId = crypto.randomUUID();
@@ -138,6 +139,10 @@ export class NeuronCore {
 
     const planner = new ExecutionPlanner(savedPlan?.objective ?? message);
     if (savedPlan) planner.restore(savedPlan);
+    const activeTaskId = taskMemoryId ?? `task:${requestId}:1`;
+    const taskIdentity = () => planner.snapshot().steps.length && !options.dryRun
+      ? { taskId: activeTaskId }
+      : {};
     const persistPlan = async (): Promise<void> => {
       // Simulated actions must never be mistaken for actions actually performed.
       if (options.dryRun) return;
@@ -145,7 +150,7 @@ export class NeuronCore {
       if (plan.steps.length === 0) return;
       const now = new Date().toISOString();
       await this.memory.save({
-        id: taskMemoryId ?? `task:${requestId}:1`,
+        id: activeTaskId,
         userId,
         kind: "TASK",
         content: JSON.stringify(plan),
@@ -167,6 +172,7 @@ export class NeuronCore {
           memories: memories.length,
           steps,
           toolResults,
+          ...taskIdentity(),
           plan: planner.snapshot()
         };
       }
@@ -231,7 +237,7 @@ export class NeuronCore {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
-        return { requestId, text, memories: memories.length, steps, toolResults, plan: planner.snapshot() };
+        return { requestId, text, memories: memories.length, steps, toolResults, ...taskIdentity(), plan: planner.snapshot() };
       }
 
       messages.push({
@@ -371,6 +377,7 @@ export class NeuronCore {
       memories: memories.length,
       steps,
       toolResults,
+      ...taskIdentity(),
       plan: planner.snapshot()
     };
   }
