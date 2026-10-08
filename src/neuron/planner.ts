@@ -72,7 +72,25 @@ export class ExecutionPlanner {
   }
 
   markCompleted(): void {
-    if (this.steps.length === 0 || this.steps.every(step => step.status === "COMPLETED")) {
+    if (this.steps.length === 0) {
+      this.status = "COMPLETED";
+      this.currentStep = undefined;
+      return;
+    }
+
+    const lastStep = this.steps[this.steps.length - 1];
+    const hasPendingStep = this.steps.some(
+      step => step.status === "PLANNED" || step.status === "AWAITING_APPROVAL"
+    );
+
+    if (hasPendingStep || lastStep.status !== "COMPLETED") return;
+
+    const allFailuresRecovered = this.steps.every((step, index) => {
+      if (step.status !== "FAILED") return true;
+      return this.steps.slice(index + 1).some(laterStep => laterStep.status === "COMPLETED");
+    });
+
+    if (allFailuresRecovered) {
       this.status = "COMPLETED";
       this.currentStep = undefined;
     }
