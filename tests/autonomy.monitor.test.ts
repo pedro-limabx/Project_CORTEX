@@ -122,8 +122,8 @@ describe("CORTEX V10 autonomous monitoring", () => {
   it("records failed scans without persisting exception payloads", async () => {
     const store = new MemoryMonitorRepository();
     await store.configure("owner",true,60,600);
-    const source = { inbox: vi.fn(async () => { throw new Error("SECRET-PAYLOAD"); }) }
-      as unknown as Pick<OperationalAlertService,"inbox">;
+    const source = ({ inbox: vi.fn(async () => { throw new Error("SECRET-PAYLOAD"); }) }
+      as unknown) as Pick<OperationalAlertService,"inbox">;
     const monitor = new AutonomousMonitoringService(store,source,"owner",
       new InAppNotificationChannel(store),()=>new Date(store.now()));
     await expect(monitor.checkDue()).rejects.toThrow("SECRET-PAYLOAD");
