@@ -133,6 +133,7 @@ describe("Workflow orchestration", () => {
     expect(counts).toHaveLength(3);
     expect(await engine.list("user-b", 20)).toEqual([]);
     await expect(engine.get("user-b", created.id)).rejects.toThrow("Workflow not found");
+    await expect(engine.get("user-a", "not-a-uuid")).rejects.toThrow("Workflow not found");
   });
 
   it("enforces approval before executing a sensitive dependency", async () => {
