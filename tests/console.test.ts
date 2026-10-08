@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import { readFile } from "node:fs/promises";
-import { Script } from "node:vm";
+import { Script, runInNewContext } from "node:vm";
 import { resolve } from "node:path";
 import { registerConsole } from "../src/console.js";
 
@@ -42,6 +42,69 @@ describe("CORTEX web console", () => {
     }
 
     await app.close();
+  });
+
+  it("sends on Enter but keeps Shift+Enter for multiline messages", async () => {
+    const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
+    const start = source.indexOf('$("#message").addEventListener("keydown"');
+    const finish = source.indexOf('$("#chat-form").addEventListener("submit"', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(finish).toBeGreaterThan(start);
+
+    type KeyEvent = {
+      key: string;
+      shiftKey: boolean;
+      ctrlKey: boolean;
+      altKey: boolean;
+      metaKey: boolean;
+      isComposing: boolean;
+      keyCode: number;
+      preventDefault: () => void;
+    };
+
+    let onKeydown: ((event: KeyEvent) => void) | undefined;
+    const form = { requestSubmit: vi.fn() };
+    const message = {
+      addEventListener: (_name: string, callback: (event: KeyEvent) => void) => {
+        onKeydown = callback;
+      }
+    };
+    runInNewContext(source.slice(start, finish), {
+      $: (selector: string) => selector === "#message" ? message : form
+    });
+    expect(onKeydown).toBeDefined();
+
+    const dispatch = (changes: Partial<KeyEvent> = {}) => {
+      const preventDefault = vi.fn();
+      onKeydown?.({
+        key: "Enter",
+        shiftKey: false,
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+        isComposing: false,
+        keyCode: 13,
+        preventDefault,
+        ...changes
+      });
+      return preventDefault;
+    };
+
+    expect(dispatch()).toHaveBeenCalledOnce();
+    expect(form.requestSubmit).toHaveBeenCalledOnce();
+
+    for (const changes of [
+      { shiftKey: true },
+      { ctrlKey: true },
+      { altKey: true },
+      { metaKey: true },
+      { isComposing: true },
+      { keyCode: 229 },
+      { key: "A" }
+    ]) {
+      expect(dispatch(changes)).not.toHaveBeenCalled();
+    }
+    expect(form.requestSubmit).toHaveBeenCalledOnce();
   });
 
   it("ships parseable JavaScript without embedding server secrets or local URL assumptions", async () => {
