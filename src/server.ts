@@ -112,6 +112,34 @@ app.post("/api/approvals/:id/reject", { preHandler: authenticate }, async (reque
   return { ok: true, approvalId: approval.id, rejectedAt: approval.rejectedAt };
 });
 
+// Task endpoints expose only records owned by the server-controlled identity.
+app.get("/api/tasks", { preHandler: authenticate }, async (request, reply) => {
+  const query = request.query as { limit?: string };
+  const limit = query.limit === undefined ? 20 : Number(query.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return reply.code(400).send({ error: "limit must be an integer between 1 and 100" });
+  }
+  const records = await memory.listTasks(config.CORTEX_USER_ID, limit);
+  return { tasks: records.map(record => ({
+    id: record.id,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    plan: JSON.parse(record.content)
+  })) };
+});
+
+app.get("/api/tasks/:id", { preHandler: authenticate }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const record = await memory.getTask(config.CORTEX_USER_ID, id);
+  if (!record) return reply.code(404).send({ error: "task not found" });
+  return {
+    id: record.id,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    plan: JSON.parse(record.content)
+  };
+});
+
 app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
   const body = request.body && typeof request.body === "object"
     ? request.body as { message?: unknown; dryRun?: unknown; approvalId?: unknown; resumeTaskId?: unknown }
