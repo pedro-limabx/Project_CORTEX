@@ -381,7 +381,7 @@ describe("NEURON persisted task resume", () => {
     expect(savedTask).toBeDefined();
 
     const resumed = await core.respond("test-user", "continue", {
-      resumeTaskId: savedTask?.id
+      resumeTaskId: savedTask!.id
     });
 
     expect(resumed.plan.objective).toBe("Calcule 10 + 5.");
