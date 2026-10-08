@@ -4,11 +4,13 @@
   "private": true,
   "description": "CORTEX — NEURON personal AI platform",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
