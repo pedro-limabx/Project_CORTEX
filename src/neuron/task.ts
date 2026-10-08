@@ -59,3 +59,35 @@ export function taskToResponse(record: MemoryRecord) {
     plan: parseTaskPlan(record.content)
   };
 }
+
+/**
+ * An interrupted PLANNED tool may have run before the process stopped.
+ * Only an authenticated operator who verified the external outcome can
+ * resolve this ambiguity. No tool is executed by this function.
+ */
+export function reconcileInterruptedPlan(
+  plan: ExecutionPlan,
+  outcome: "completed" | "failed"
+): ExecutionPlan {
+  if (plan.status === "COMPLETED" || plan.status === "FAILED") {
+    throw new Error("Task is already finalized");
+  }
+  const interrupted = plan.steps.filter(step => step.status === "PLANNED");
+  if (interrupted.length !== 1 || interrupted[0]?.index !== plan.steps.length) {
+    throw new Error("Task has no single interrupted final step to reconcile");
+  }
+  const steps = plan.steps.map(step => ({ ...step }));
+  const last = steps[steps.length - 1]!;
+  last.status = outcome === "completed" ? "COMPLETED" : "FAILED";
+  if (outcome === "failed") {
+    last.error = "Operator verified this interrupted step did not complete";
+  } else {
+    delete last.error;
+  }
+  return {
+    ...plan,
+    status: outcome === "completed" ? "ACTIVE" : "REPLANNING",
+    currentStep: outcome === "completed" ? undefined : last.index,
+    steps
+  };
+}
