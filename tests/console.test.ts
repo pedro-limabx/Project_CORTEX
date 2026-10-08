@@ -113,6 +113,9 @@ describe("CORTEX web console", () => {
     expect(chat.api).toHaveBeenCalledWith("/api/chat", {
       method: "POST", body: { message: "Calcule 25*18", dryRun: false }
     });
+    expect(chat.notice).toHaveBeenCalledWith(
+      "Mensagem enviada ao servidor. Aguardando resposta do NEURON..."
+    );
     expect(chat.messages).toHaveBeenNthCalledWith(1, "VOCÊ", "Calcule 25*18", true);
     expect(chat.messages).toHaveBeenNthCalledWith(2, "NEURON", "O resultado é 450.");
     expect(chat.button.disabled).toBe(false);
@@ -142,10 +145,9 @@ describe("CORTEX web console", () => {
     expect(chat.api).not.toHaveBeenCalled();
 
     chat.keydown();
-    await vi.waitFor(() => expect(chat.notice).toHaveBeenCalledOnce());
-    expect(chat.notice).toHaveBeenCalledWith(
+    await vi.waitFor(() => expect(chat.notice).toHaveBeenCalledWith(
       "Falha ao enviar ao NEURON: Network unreachable", "error"
-    );
+    ));
     expect(chat.textarea.value).toBe("Calcule 25*18");
     expect(chat.messages).not.toHaveBeenCalled();
     expect(chat.button.disabled).toBe(false);
