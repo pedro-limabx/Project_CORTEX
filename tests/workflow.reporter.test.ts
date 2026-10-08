@@ -56,10 +56,10 @@ describe("CORTEX read-only workflow reporting", () => {
     expect(summary.readOnly).toBe(true);
     expect(summary.mode).toBe("recent");
     expect(summary.count).toBe(5);
-    expect(summary.text).toContain("1 ativos");
+    expect(summary.text).toContain("1 ativo");
     expect(summary.text).toContain("1 aguardando aprovação");
     expect(summary.text).toContain("1 com falha");
-    expect(summary.text).toContain("1 concluídos");
+    expect(summary.text).toContain("1 concluído");
 
     const active = summary.workflows.find(item => item.id === ids.active)!;
     expect(active.percent).toBe(0);
