@@ -107,7 +107,7 @@ describe("Persisted task lifecycle", () => {
     expect(await approvalEngine.approve(approvalId!, "user-1")).toBeDefined();
 
     const resumed = await makeCore(provider, memory, registry, approvalEngine)
-      .respond("user-1", "continue", { resumeTaskId: taskId, approvalId });
+      .respond("user-1", "continue", { resumeTaskId: taskId, approvalId: approvalId! });
     expect(resumed.plan.status).toBe("COMPLETED");
     expect(resumed.plan.steps[0]?.status).toBe("COMPLETED");
     expect(resumed.plan.steps).toHaveLength(1);
