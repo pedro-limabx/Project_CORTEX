@@ -160,7 +160,13 @@ export class WorkflowEngine {
   }
 
   async advance(userId: string, id: string, approvalId?: string) {
-    let run = await this.settle(await this.load(userId, id));
+    let run = await this.load(userId, id);
+    // In-flight effects must be reconciled first; do not even mutate skipped
+    // branch state while an external tool might still be running.
+    const beforeSettling = workflowStatus(run);
+    if (beforeSettling !== "FAILED" && beforeSettling !== "NEEDS_RECONCILIATION") {
+      run = await this.settle(run);
+    }
     const status = workflowStatus(run);
     if (status === "COMPLETED") return workflowResponse(run);
     if (status === "FAILED" || status === "NEEDS_RECONCILIATION") {
