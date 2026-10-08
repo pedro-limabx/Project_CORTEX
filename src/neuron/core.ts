@@ -87,6 +87,9 @@ export class NeuronCore {
     plan: ReturnType<ExecutionPlanner["snapshot"]>;
   }> {
     const requestId = crypto.randomUUID();
+    if (options.resumeTaskId && options.dryRun) {
+      throw new Error("Cannot resume persisted tasks in dry-run mode");
+    }
     const memories = await this.memory.search(userId, message, 5);
     const previousTasks = await this.memory.listTasks(userId, 3);
     const contextParts = [
@@ -136,6 +139,8 @@ export class NeuronCore {
     const planner = new ExecutionPlanner(savedPlan?.objective ?? message);
     if (savedPlan) planner.restore(savedPlan);
     const persistPlan = async (): Promise<void> => {
+      // Simulated actions must never be mistaken for actions actually performed.
+      if (options.dryRun) return;
       const plan = planner.snapshot();
       if (plan.steps.length === 0) return;
       const now = new Date().toISOString();
