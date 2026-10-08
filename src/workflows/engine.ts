@@ -8,6 +8,7 @@ import { ToolExecutor } from "../tools/executor.js";
 import { ToolRegistry } from "../tools/registry.js";
 import type { WorkflowStore } from "./store.js";
 import { inspectStepInput, resolveStepInput } from "./bindings.js";
+import { evaluateWorkflowBranches } from "./conditions.js";
 import {
   parseWorkflowDefinition,
   readyWorkflowSteps,
@@ -69,6 +70,8 @@ export class WorkflowEngine {
         tool: step.tool,
         input: JSON.parse(serialized) as unknown,
         dependsOn: step.dependsOn,
+        ...(step.dependsMode ? { dependsMode: step.dependsMode } : {}),
+        ...(step.when ? { when: step.when } : {}),
         status: "PENDING" as const
       };
     });
@@ -79,7 +82,9 @@ export class WorkflowEngine {
         id: step.id,
         tool: step.tool,
         input: step.input,
-        dependsOn: step.dependsOn
+        dependsOn: step.dependsOn,
+        ...(step.dependsMode ? { dependsMode: step.dependsMode } : {}),
+        ...(step.when ? { when: step.when } : {})
       }))
     };
   }
@@ -139,8 +144,23 @@ export class WorkflowEngine {
     return next;
   }
 
+  /**
+   * Apply automatic SKIPPED decisions (never tools) with one atomic CAS.
+   * A prior process crash leaves the pending decisions reproducible.
+   */
+  private async settle(run: WorkflowRun): Promise<WorkflowRun> {
+    const decided = evaluateWorkflowBranches(run);
+    if (!decided) return run;
+    decided.version = run.version + 1;
+    decided.updatedAt = new Date().toISOString();
+    if (!await this.store.update(run.userId, run.version, decided)) {
+      throw new WorkflowConflictError("Workflow was modified by another request");
+    }
+    return decided;
+  }
+
   async advance(userId: string, id: string, approvalId?: string) {
-    let run = await this.load(userId, id);
+    let run = await this.settle(await this.load(userId, id));
     const status = workflowStatus(run);
     if (status === "COMPLETED") return workflowResponse(run);
     if (status === "FAILED" || status === "NEEDS_RECONCILIATION") {
@@ -275,6 +295,7 @@ export class WorkflowEngine {
       await this.audit.record(entry);
     }
 
+    run = await this.settle(run);
     return workflowResponse(run);
   }
 
@@ -293,6 +314,6 @@ export class WorkflowEngine {
       ...(outcome === "failed" ? { error: "Operator verified the step did not complete" } : {}),
       finishedAt: new Date().toISOString()
     });
-    return workflowResponse(updated);
+    return workflowResponse(await this.settle(updated));
   }
 }
