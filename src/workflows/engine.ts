@@ -31,7 +31,11 @@ export class WorkflowEngine {
     private readonly audit?: AuditStore
   ) {}
 
-  async create(userId: string, input: unknown) {
+  /**
+   * Validate and normalize an untrusted workflow definition without persisting or
+   * executing anything. Used by both manual and LLM-assisted authoring.
+   */
+  validate(input: unknown) {
     const definition = parseWorkflowDefinition(input);
     const steps: WorkflowStep[] = definition.steps.map(step => {
       const tool = this.registry.get(step.tool);
@@ -58,6 +62,23 @@ export class WorkflowEngine {
       };
     });
 
+    return {
+      objective: definition.objective,
+      steps: steps.map(step => ({
+        id: step.id,
+        tool: step.tool,
+        input: step.input,
+        dependsOn: step.dependsOn
+      }))
+    };
+  }
+
+  async create(userId: string, input: unknown) {
+    const definition = this.validate(input);
+    const steps: WorkflowStep[] = definition.steps.map(step => ({
+      ...step,
+      status: "PENDING" as const
+    }));
     const now = new Date().toISOString();
     const run: WorkflowRun = {
       id: crypto.randomUUID(),
