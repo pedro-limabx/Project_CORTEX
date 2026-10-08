@@ -178,7 +178,6 @@ export class WorkflowEngine {
       return workflowResponse(run);
     }
 
-    let approved = false;
     if (pendingApproval) {
       if (step.approvalId !== approvalId) {
         throw new WorkflowConflictError("Approval id does not match the pending step");
@@ -186,15 +185,25 @@ export class WorkflowEngine {
       if (!evaluatePolicy(tool, granted, true).allowed) {
         throw new WorkflowConflictError("Required permission was revoked");
       }
-      approved = await this.approvals.consume(approvalId!, userId, step.tool, step.input);
-      if (!approved) throw new WorkflowConflictError("Approval has not been granted or has expired");
     }
 
-    // Write-ahead transition. In a crash, RUNNING is ambiguous and MUST NOT be replayed.
+    // Claim the step before consuming its one-use approval. A competing request
+    // cannot consume authorization and then lose the workflow version race.
     run = await this.transition(run, step.id, {
       status: "RUNNING",
       startedAt: new Date().toISOString()
     });
+
+    let approved = false;
+    if (pendingApproval) {
+      approved = await this.approvals.consume(approvalId!, userId, step.tool, step.input);
+      if (!approved) {
+        // No tool has been called: it is safe to put the step back into
+        // WAITING_APPROVAL and let the operator resolve the approval.
+        await this.transition(run, step.id, { status: "WAITING_APPROVAL" });
+        throw new WorkflowConflictError("Approval has not been granted or has expired");
+      }
+    }
 
     const requestId = crypto.randomUUID();
     const result = await this.executor.execute(step.tool, step.input, {
