@@ -73,3 +73,65 @@ LLM_BASE_URL=https://api.openai.com/v1
 LLM_API_KEY=
 LLM_MODEL=gpt-6-luna
 ```
+
+
+## Gerenciamento de tarefas persistidas
+
+O NEURON registra os passos da execução (incluindo falhas e solicitações de aprovação)
+e permite consultar ou retomar planos incompletos.
+
+Rotas autenticadas (envie `Authorization: Bearer <CORTEX_API_TOKEN>` quando configurado):
+
+| Método | Rota | Finalidade |
+| --- | --- | --- |
+| GET | `/api/tasks?limit=20` | Listar tarefas mais recentes (limite de 1 a 100) |
+| GET | `/api/tasks/:id` | Consultar histórico e status de uma tarefa |
+| POST | `/api/tasks/:id/resume` | Retomar um plano interrompido ou que aguarda aprovação |
+| POST | `/api/tasks/:id/reconcile` | Resolver manualmente uma execução com resultado externo verificado |
+| POST | `/api/approvals/:id/approve` | Aprovar uma ação sensível, sem executá-la |
+
+Exemplo de retomada sem aprovação pendente:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/tasks/SEU_TASK_ID/resume \
+  -H "Content-Type: application/json" \
+  -d '{"message":"continue"}'
+```
+
+Ao encontrar uma ferramenta HIGH/CRITICAL, o NEURON **pausa** e retorna um
+`approvalId` em `toolResults` e em `plan.steps`. O processo correto é:
+
+1. Aprovar com `POST /api/approvals/SEU_APPROVAL_ID/approve`.
+2. Retomar a tarefa original com
+   `POST /api/tasks/SEU_TASK_ID/resume`, JSON
+   `{"approvalId":"SEU_APPROVAL_ID"}`.
+3. O executor verifica o token de aprovação para os mesmos argumentos e
+   executa a ferramenta registrada, sem pedir ao LLM que refaça essa chamada.
+
+Exemplo de reconciliação **somente depois de confirmar externamente** que o
+último passo interrompido realmente terminou com sucesso:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/tasks/SEU_TASK_ID/reconcile \
+  -H "Content-Type: application/json" \
+  -d '{"outcome":"completed","confirmed":true}'
+```
+
+Se foi confirmado que **não executou**, use `"outcome":"failed"` e prossiga
+com `/resume`. O CORTEX não tenta descobrir sozinho o resultado de uma
+operação externa ambígua.
+
+### Persistência e limites de segurança
+
+- Configure `DATABASE_URL` para manter tarefas após reiniciar o servidor.
+  No modo em memória, os dados desaparecem após o processo terminar.
+- Antes de executar uma ferramenta, o CORTEX grava um estado `PLANNED`.
+  Se cair durante a operação, bloqueia a retomada automática para evitar repetição
+  acidental. É necessário verificar o resultado e usar `/reconcile`.
+- Tarefas `COMPLETED` ou `FAILED` são terminais para o endpoint de retomada.
+- O registro de passos e a aprovação de execução **não garantem transações
+  exatamente uma vez** para serviços externos. Concorrência entre servidores,
+  confirmações externas e idempotência dos serviços conectados ainda precisam de
+  proteção adicional antes de habilitar automações financeiras ou físicas.
+- `.github/workflows/ci.yml` executa typecheck, testes e build a cada push/PR,
+  quando GitHub Actions estiver habilitado no repositório.
