@@ -2,6 +2,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import crypto from "node:crypto";
 import cors from "@fastify/cors";
 import { config } from "./config.js";
+import { registerConsole } from "./console.js";
 import { InMemoryAuditStore, type AuditStore } from "./audit/store.js";
 import { PostgresAuditStore } from "./audit/postgres-store.js";
 import { Pool } from "pg";
@@ -44,6 +45,7 @@ async function authenticate(request: FastifyRequest, reply: FastifyReply): Promi
 }
 
 await app.register(cors, { origin: config.CORS_ORIGIN });
+registerConsole(app);
 
 const pool = config.DATABASE_URL ? new Pool({ connectionString: config.DATABASE_URL }) : undefined;
 let memory: MemoryStore;
