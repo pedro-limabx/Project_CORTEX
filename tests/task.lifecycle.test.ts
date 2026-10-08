@@ -113,7 +113,7 @@ describe("Persisted task lifecycle", () => {
     expect(resumed.plan.steps).toHaveLength(1);
     expect(executed).toBe(1);
     await expect(makeCore(provider, memory, registry, approvalEngine)
-      .respond("user-1", "continue", { resumeTaskId: taskId, approvalId }))
+      .respond("user-1", "continue", { resumeTaskId: taskId, approvalId: approvalId! }))
       .rejects.toThrow("Task is already finalized");
     expect(executed).toBe(1);
   });
