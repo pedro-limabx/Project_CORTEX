@@ -8,6 +8,7 @@ import { ToolExecutor } from "../tools/executor.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { ExecutionPlanner } from "./planner.js";
 import { parseTaskPlan } from "./task.js";
+import { WorkflowReporter, type WorkflowReport } from "../workflows/reporter.js";
 
 const MAX_STEPS = 8;
 const SYSTEM_PROMPT = `
@@ -71,7 +72,8 @@ export class NeuronCore {
     private readonly executor: ToolExecutor,
     private readonly permissions: PermissionEngine,
     private readonly approvals: ApprovalEngine,
-    private readonly audit?: AuditStore
+    private readonly audit?: AuditStore,
+    private readonly workflowReporter?: WorkflowReporter
   ) {}
 
   async respond(
@@ -85,9 +87,28 @@ export class NeuronCore {
     steps: number;
     toolResults: unknown[];
     taskId?: string;
+    workflowReport?: WorkflowReport;
     plan: ReturnType<ExecutionPlanner["snapshot"]>;
   }> {
     const requestId = crypto.randomUUID();
+    // Read-only workflow monitoring is deterministic and owner-scoped. Never
+    // route a status question through the tool executor or an untrusted model.
+    if (!options.resumeTaskId && !options.approvalId && this.workflowReporter) {
+      const report = await this.workflowReporter.handleChatMessage(userId, message);
+      if (report) {
+        const planner = new ExecutionPlanner(message);
+        planner.markCompleted();
+        return {
+          requestId,
+          text: report.text,
+          memories: 0,
+          steps: 0,
+          toolResults: [],
+          workflowReport: report,
+          plan: planner.snapshot()
+        };
+      }
+    }
     if (options.resumeTaskId && options.dryRun) {
       throw new Error("Cannot resume persisted tasks in dry-run mode");
     }
