@@ -64,7 +64,7 @@ export class WorkflowProposalService {
           ].join("\n")
         },
         { role: "user", content: objective }
-      ], { toolChoice: "none", temperature: 0 });
+      ], { toolChoice: "none" });
 
       if (response.toolCalls?.length) {
         throw new WorkflowProposalError("The model attempted tool execution instead of drafting");
@@ -91,6 +91,10 @@ export class WorkflowProposalService {
         throw new WorkflowProposalError("The proposed workflow failed validation: " + error.message);
       }
       throw error;
+    }
+
+    if (definition.steps.length > 8) {
+      throw new WorkflowProposalError("Model-generated workflow drafts are limited to 8 steps");
     }
 
     const warnings = definition.steps.flatMap(step => {
