@@ -25,6 +25,8 @@ import { WorkflowEngine } from "./workflows/engine.js";
 import { WorkflowProposalService, WorkflowProposalError } from "./workflows/proposal.js";
 import { WorkflowReporter } from "./workflows/reporter.js";
 import { MonitoringService } from "./workflows/monitoring.js";
+import { PostgresMonitorRepository } from "./autonomy/store.js";
+import { AutonomousMonitoringService, InAppNotificationChannel, validateMonitorSettings } from "./autonomy/monitor.js";
 import {
   InMemoryAlertAcknowledgementStore,
   PostgresAlertAcknowledgementStore,
@@ -65,6 +67,7 @@ let approvals: ApprovalEngine;
 let audit: AuditStore = new InMemoryAuditStore();
 let workflowStore: WorkflowStore;
 let alertAcknowledgements: AlertAcknowledgementStore;
+let autonomousStore: PostgresMonitorRepository | undefined;
 if (pool) {
   const postgresMemory = new PostgresMemoryStore(pool);
   await postgresMemory.initialize();
@@ -84,6 +87,8 @@ if (pool) {
   const postgresAlerts = new PostgresAlertAcknowledgementStore(pool);
   await postgresAlerts.initialize();
   alertAcknowledgements = postgresAlerts;
+  autonomousStore = new PostgresMonitorRepository(pool);
+  await autonomousStore.initialize();
   app.log.info("Persistent PostgreSQL memory and audit enabled");
 } else {
   memory = new InMemoryStore();
@@ -108,6 +113,11 @@ const llm = config.LOCAL_TEST_MODE
 const workflowReporter = new WorkflowReporter(workflowStore);
 const monitoring = new MonitoringService(workflowStore);
 const operationalAlerts = new OperationalAlertService(workflowStore, alertAcknowledgements);
+const backendMonitor = autonomousStore
+  ? new AutonomousMonitoringService(autonomousStore, operationalAlerts, config.CORTEX_USER_ID,
+    new InAppNotificationChannel(autonomousStore), () => new Date(),
+    () => app.log.error('Autonomous monitoring check failed (details redacted)'))
+  : undefined;
 const neuron = new NeuronCore(llm, memory, registry, executor, permissions, approvals, audit, workflowReporter);
 const workflows = new WorkflowEngine(workflowStore, registry, executor, permissions, approvals, audit);
 const workflowProposals = new WorkflowProposalService(llm, workflows, registry, config.LOCAL_TEST_MODE);
@@ -311,6 +321,70 @@ app.post("/api/alerts/acknowledge", { preHandler: authenticate }, async (request
   }
 });
 
+// V10: server-side, persistent and human-supervised monitoring configuration.
+// No endpoint in this section invokes LLMs, tools, approvals or reconciliations.
+app.get("/api/monitoring/backend", { preHandler: authenticate }, async () => {
+  if (!autonomousStore) return {
+    available: false, reason: "DATABASE_URL required for persistent backend monitoring"
+  };
+  return {
+    available: true,
+    settings: await autonomousStore.getSettings(config.CORTEX_USER_ID),
+    delivery: ["in-app"],
+    readOnlyChecks: true
+  };
+});
+
+app.put("/api/monitoring/backend", { preHandler: authenticate }, async (request, reply) => {
+  if (!autonomousStore) return reply.code(503).send({ error: "PostgreSQL is required" });
+  let input: ReturnType<typeof validateMonitorSettings>;
+  try { input = validateMonitorSettings(request.body); }
+  catch { return reply.code(400).send({ error: "Invalid monitoring configuration" }); }
+  const settings = await autonomousStore.configure(
+    config.CORTEX_USER_ID, input.enabled, input.intervalSeconds, input.cooldownSeconds
+  );
+  // Scheduling is owned by the backend. Wake it immediately after explicit enable.
+  if (input.enabled) void backendMonitor?.checkDue().catch(
+    () => app.log.error("Autonomous monitoring check failed (details redacted)")
+  );
+  return { available: true, settings, delivery: ["in-app"] };
+});
+
+app.get("/api/monitoring/backend/events", { preHandler: authenticate }, async (request, reply) => {
+  if (!autonomousStore) return reply.code(503).send({ error: "PostgreSQL is required" });
+  const query = request.query as { limit?: unknown };
+  const limit = query.limit === undefined ? 20 : Number(query.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return reply.code(400).send({ error: "limit must be 1..100" });
+  }
+  return { events: await autonomousStore.events(config.CORTEX_USER_ID, limit) };
+});
+
+app.get("/api/notifications", { preHandler: authenticate }, async (request, reply) => {
+  if (!autonomousStore) return reply.code(503).send({ error: "PostgreSQL is required" });
+  const query = request.query as { view?: unknown; limit?: unknown };
+  const view = query.view === undefined ? "unread" : query.view;
+  const limit = query.limit === undefined ? 50 : Number(query.limit);
+  if ((view !== "all" && view !== "unread")
+    || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return reply.code(400).send({ error: "view must be all or unread; limit must be 1..100" });
+  }
+  // UUID, status, severity, timestamps only; no objectives, errors, inputs or outputs.
+  return autonomousStore.list(config.CORTEX_USER_ID, view, limit);
+});
+
+app.post("/api/notifications/:id/read", { preHandler: authenticate }, async (request, reply) => {
+  if (!autonomousStore) return reply.code(503).send({ error: "PostgreSQL is required" });
+  const { id } = request.params as { id: string };
+  const body = request.body && typeof request.body === "object" ? request.body as { confirmed?: unknown } : {};
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id) || body.confirmed !== true) {
+    return reply.code(400).send({ error: "Valid id and confirmed=true required" });
+  }
+  const found = await autonomousStore.read(config.CORTEX_USER_ID, id, new Date().toISOString());
+  if (!found) return reply.code(404).send({ error: "Notification not found" });
+  return { read: true, actionExecuted: false, approvalGranted: false };
+});
+
 // Reporting is read-only and scoped to the server-controlled identity.
 // Owner-scoped, read-only status and performance indicators from a bounded
 // snapshot of recent workflows. No raw inputs, outputs or secrets are exposed.
@@ -446,6 +520,7 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
 });
 
 const shutdown = async () => {
+  await backendMonitor?.stop();
   await app.close();
   await pool?.end();
   process.exit(0);
@@ -454,3 +529,4 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 await app.listen({ port: config.PORT, host: config.HOST });
+backendMonitor?.start();

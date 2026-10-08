@@ -806,3 +806,8 @@ não altera o workflow e não substitui investigação, autorização,
 reconciliação ou execução humana.
 
 Validação: `npm run typecheck && npm test && npm run build`.
+
+
+### CORTEX V10 — Monitoramento persistente no Node.js
+
+A V10 acrescenta o monitor autônomo (inicialmente desativado), com configuração, histórico e notificações no PostgreSQL. Funciona com o painel fechado enquanto Node.js e PostgreSQL permanecem ativos. Consulte [o guia da V10](docs/AUTONOMOUS_MONITORING.md) para API, ativação, limitações e testes. A V8/V9 continua independente e compatível.
