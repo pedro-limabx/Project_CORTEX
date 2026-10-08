@@ -21,7 +21,7 @@ const run: WorkflowRun = {
 
 describe("PostgreSQL workflow persistence", () => {
   it("creates an isolated workflow table and list index", async () => {
-    const query = vi.fn(async () => ({ rows: [] }));
+    const query = vi.fn(async (..._args: unknown[]) => ({ rows: [] }));
     const store = new PostgresWorkflowStore({ query } as unknown as Pool);
     await store.initialize();
     expect(query).toHaveBeenCalledTimes(2);
@@ -30,7 +30,7 @@ describe("PostgreSQL workflow persistence", () => {
   });
 
   it("writes state as parameterized JSON and enforces atomic version updates", async () => {
-    const query = vi.fn(async () => ({ rows: [{ id: run.id }] }));
+    const query = vi.fn(async (..._args: unknown[]) => ({ rows: [{ id: run.id }] }));
     const store = new PostgresWorkflowStore({ query } as unknown as Pool);
     await store.create(run);
     const createArgs = query.mock.calls[0];
@@ -52,7 +52,8 @@ describe("PostgreSQL workflow persistence", () => {
   });
 
   it("filters reads to the server-controlled user and handles update conflicts", async () => {
-    const query = vi.fn(async (statement: string) => {
+    const query = vi.fn(async (...args: unknown[]) => {
+      const statement = String(args[0]);
       if (statement.startsWith("UPDATE")) return { rows: [] };
       return { rows: [{ state: run }] };
     });
