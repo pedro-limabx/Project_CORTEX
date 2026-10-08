@@ -207,29 +207,59 @@ function addMessage(who, value, fromUser = false) {
   history.append(bubble);
   history.scrollTop = history.scrollHeight;
 }
-// Enter sends the message; Shift+Enter inserts a newline.
-// Do not submit while an IME is composing accented/Asian text.
+// Single chat submission path: Enter and the button BOTH call the API directly.
+// In particular, do not use requestSubmit(): native form validation can prevent
+// the submit handler from running, even after keydown already consumed Enter.
+// Chat has its own pending flag; background dashboard refreshes must not drop messages.
+let chatSending = false;
+async function sendChatMessage() {
+  if (chatSending) return;
+  const input = $("#message");
+  const message = input.value.trim();
+  if (!message) return;
+
+  const sendButton = $("#chat-form button[type=submit]");
+  chatSending = true;
+  sendButton.disabled = true;
+  hideNotice();
+
+  try {
+    const dryRun = $("#dry-run").checked;
+    const result = await api("/api/chat", { method: "POST", body: { message, dryRun } });
+    // Only clear the submitted draft, preserving new text typed while waiting.
+    if (input.value.trim() === message) input.value = "";
+    addMessage("VOCÊ", message, true);
+    state.lastChat = result;
+    addMessage("NEURON", result.text || "Nenhuma resposta textual recebida.");
+    renderChatInspection(result);
+    if (result.taskId) {
+      try {
+        await loadTasks();
+      } catch {
+        // Refreshing history is secondary; never treat an answered chat as unsent.
+      }
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Não foi possível enviar a mensagem.";
+    showNotice("Falha ao enviar ao NEURON: " + reason, "error");
+    // Keep the message in the textarea so the user can retry.
+  } finally {
+    chatSending = false;
+    sendButton.disabled = false;
+  }
+}
+
+// Enter sends; Shift+Enter creates a newline. Respect text composition.
 $("#message").addEventListener("keydown", (event) => {
   if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229
       || event.ctrlKey || event.altKey || event.metaKey) return;
   event.preventDefault();
-  $("#chat-form").requestSubmit();
+  void sendChatMessage();
 });
 
 $("#chat-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  const message = $("#message").value.trim();
-  if (!message) return;
-  action(async () => {
-    const dryRun = $("#dry-run").checked;
-    addMessage("VOCÊ", message, true);
-    $("#message").value = "";
-    const result = await api("/api/chat", { method: "POST", body: { message, dryRun } });
-    state.lastChat = result;
-    addMessage("NEURON", result.text || "Nenhuma resposta textual recebida.");
-    renderChatInspection(result);
-    if (result.taskId) await loadTasks();
-  }, $("#chat-form button[type=submit]"));
+  void sendChatMessage();
 });
 function renderChatInspection(result) {
   const target = clear($("#chat-inspect"));
