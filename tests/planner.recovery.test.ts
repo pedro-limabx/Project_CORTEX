@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ExecutionPlanner } from "../src/neuron/planner";
+import { ExecutionPlanner } from "../src/neuron/planner.js";
 
 describe("ExecutionPlanner recovery state", () => {
   it("keeps a failed-only plan in replanning", () => {
@@ -25,8 +25,8 @@ describe("ExecutionPlanner recovery state", () => {
     const plan = planner.snapshot();
     expect(plan.status).toBe("COMPLETED");
     expect(plan.currentStep).toBeUndefined();
-    expect(plan.steps[0].status).toBe("FAILED");
-    expect(plan.steps[1].status).toBe("COMPLETED");
+    expect(plan.steps[0]?.status).toBe("FAILED");
+    expect(plan.steps[1]?.status).toBe("COMPLETED");
   });
 
   it("does not complete when the latest step is not successful", () => {
