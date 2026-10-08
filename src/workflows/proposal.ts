@@ -62,6 +62,10 @@ export class WorkflowProposalService {
             "Condition operators: eq, neq, gt, gte, lt, lte. Numeric comparisons require a numeric value.",
             "The when.step MUST also be a direct dependency in dependsOn.",
             "A false condition skips the step. To join mutually exclusive branches, depend on both and use dependsMode: \"settled\".",
+            "For failure recovery, a step can declare onFailureOf: \"failed-id\" and include \"failed-id\" in dependsOn.",
+            "Recovery handlers cannot reference the failed step's output, use when, or use dependsMode: \"settled\".",
+            "A recovery is NEVER automatic: a human must investigate, authorize recovery separately, and explicitly advance the handler.",
+            "Do not add retries or chains of recovery handlers. Never claim that a failed external side effect definitely did not occur.",
             "Do not invent outputs from skipped steps. A settled join can read only outputs from its explicitly completed dependencies.",
             "Only refer to data fields actually returned by a registered tool; do not guess unavailable output fields.",
             "Never claim to have executed, authorized, scheduled or saved anything.",
@@ -123,9 +127,14 @@ export class WorkflowProposalService {
 
     const warnings = definition.steps.flatMap(step => {
       const risk = this.registry.get(step.tool)?.risk;
-      return risk === "HIGH" || risk === "CRITICAL"
-        ? ["Etapa " + step.id + " (" + step.tool + ") exige aprovação explícita (" + risk + ")."]
-        : [];
+      const notices: string[] = [];
+      if (risk === "HIGH" || risk === "CRITICAL") {
+        notices.push("Etapa " + step.id + " (" + step.tool + ") exige aprovação explícita (" + risk + ").");
+      }
+      if (step.onFailureOf) {
+        notices.push("A recuperação " + step.id + " exige investigação e autorização humana após falha confirmada.");
+      }
+      return notices;
     });
 
     return {
