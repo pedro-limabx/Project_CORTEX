@@ -154,6 +154,11 @@ describe("Workflow orchestration", () => {
     expect((await engine.advance("user-a", created.id)).status).toBe("AWAITING_APPROVAL");
     await expect(engine.advance("user-a", created.id, "incorrect"))
       .rejects.toThrow("Approval id does not match");
+    // A premature resume must not call the tool or strand the workflow RUNNING.
+    await expect(engine.advance("user-a", created.id, approvalId))
+      .rejects.toThrow("Approval has not been granted");
+    expect((await engine.get("user-a", created.id)).status).toBe("AWAITING_APPROVAL");
+    expect(counts).toEqual([]);
     expect(await approvalEngine.approve(approvalId!, "user-a")).toBeDefined();
 
     const completedStep = await engine.advance("user-a", created.id, approvalId);
