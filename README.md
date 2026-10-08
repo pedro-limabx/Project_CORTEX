@@ -135,3 +135,85 @@ operação externa ambígua.
   proteção adicional antes de habilitar automações financeiras ou físicas.
 - `.github/workflows/ci.yml` executa typecheck, testes e build a cada push/PR,
   quando GitHub Actions estiver habilitado no repositório.
+
+
+## Orquestração v2 — Workflows com dependências
+
+O CORTEX possui agora um **motor de workflows determinístico** separado do loop
+conversacional do NEURON. Cada fluxo é um grafo dirigido acíclico (DAG) de até
+32 etapas, executadas **uma por chamada** de avanço, com dependências explícitas.
+A versão inicial aceita definições pela API; **não transforma automaticamente**
+prompts em DAGs e **não executa em segundo plano**.
+
+### API v2
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| POST | `/api/workflows` | Cria um fluxo validado |
+| GET | `/api/workflows?limit=20` | Lista os fluxos do usuário atual |
+| GET | `/api/workflows/:id` | Exibe etapas, resultados e progresso |
+| POST | `/api/workflows/:id/advance` | Avança no máximo uma etapa executável |
+| POST | `/api/workflows/:id/reconcile` | Confirma manualmente o resultado incerto |
+
+Como no restante da API, as rotas usam a identidade definida no servidor
+(`CORTEX_USER_ID`) e exigem token Bearer quando `CORTEX_API_TOKEN` estiver definido.
+
+Crie um fluxo com duas etapas:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/workflows \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "objective": "Calcular duas expressões em sequência",
+    "steps": [
+      {"id":"calculo-a","tool":"calculator.evaluate","input":{"expression":"25*18"}},
+      {"id":"calculo-b","tool":"calculator.evaluate","input":{"expression":"450/3"},"dependsOn":["calculo-a"]}
+    ]
+  }'
+```
+
+A resposta contém `id`, `status`, `version`, `steps` e
+`progress` (total, concluídas, percentual e próximas etapas prontas).
+
+Use esse `id` para avançar uma etapa por solicitação:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/workflows/SEU_ID/advance \
+  -H 'Content-Type: application/json' -d '{}'
+```
+
+Se uma ferramenta necessitar aprovação, o avanço cria uma solicitação e o
+workflow passa a `AWAITING_APPROVAL`. Aprovar continua sendo uma operação
+separada em `POST /api/approvals/:approvalId/approve`. Depois disso:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/workflows/SEU_ID/advance \
+  -H 'Content-Type: application/json' \
+  -d '{"approvalId":"ID_APROVADO"}'
+```
+
+### Garantias e limites
+
+- O grafo rejeita IDs duplicados, ciclos e referências a dependências ausentes.
+- Uma etapa só fica pronta quando todas as dependências foram concluídas.
+- Os parâmetros das ferramentas são validados na criação e verificados pelo
+  executor de ferramentas, permissões e aprovações.
+- A transição `RUNNING` é persistida **antes** da execução.
+  Se houver falha de processo durante uma ação, o fluxo assume
+  `NEEDS_RECONCILIATION`, sem repetir automaticamente a etapa.
+- Para reconciliar, confirme externamente o resultado, aguarde ao menos 30s
+  do início do passo (o timeout do executor é 15s), e envie:
+
+```json
+{"stepId":"calculo-a","confirmed":true,"outcome":"completed"}
+```
+
+  para `POST /api/workflows/SEU_ID/reconcile`. Se foi verificado que a ação
+  **não aconteceu**, envie `"outcome":"failed"`, encerrando o fluxo com falha.
+- PostgreSQL mantém os workflows em uma tabela separada
+  (`cortex_workflows`) com versionamento otimista para evitar que duas
+  requisições concorrentes avancem o mesmo estado. No modo sem banco, os
+  fluxos só existem durante a vida do processo.
+- Não há execução paralela, fila, cron, idempotência transacional de efeitos
+  externos ou retentativa automática. Isso é uma **fundação supervisionada**,
+  não uma autorização para operações financeiras ou físicas autônomas.
