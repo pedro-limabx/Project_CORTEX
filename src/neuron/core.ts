@@ -255,7 +255,29 @@ export class NeuronCore {
           ? call.name
           : this.registry.list().find(tool => modelToolName(tool.name) === call.name)?.name;
         const toolDefinition = canonicalToolName ? this.registry.get(canonicalToolName) : undefined;
-        const planStep = planner.begin(canonicalToolName ?? call.name, input);
+        const toolName = canonicalToolName ?? call.name;
+        // A resumed plan must never automatically repeat the same successful action.
+        const previouslyCompleted = Boolean(options.resumeTaskId) && planner.snapshot().steps.some(
+          step => step.status === "COMPLETED"
+            && step.tool === toolName
+            && JSON.stringify(step.input) === JSON.stringify(input)
+        );
+        if (previouslyCompleted) {
+          const skipped = {
+            tool: toolName,
+            ok: true,
+            output: { skipped: true, reason: "Already completed in the persisted task" }
+          };
+          toolResults.push(skipped);
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            name: call.name,
+            content: JSON.stringify(skipped)
+          });
+          continue;
+        }
+        const planStep = planner.begin(toolName, input);
         // Durably record intent before execution; a crash cannot silently trigger a replay.
         await persistPlan();
         const hasPermissions = toolDefinition
