@@ -217,3 +217,42 @@ curl -X POST http://127.0.0.1:3000/api/workflows/SEU_ID/advance \
 - Não há execução paralela, fila, cron, idempotência transacional de efeitos
   externos ou retentativa automática. Isso é uma **fundação supervisionada**,
   não uma autorização para operações financeiras ou físicas autônomas.
+
+
+## Laboratório Web — Console CORTEX
+
+A interface experimental fica em **/console**, servida pelo próprio
+servidor Fastify (porta 3000). Seus arquivos estão em
+`web/index.html`, `web/styles.css` e `web/app.js`. Não é necessário
+iniciar outro servidor frontend nem configurar CORS para a interface.
+
+O console permite conversar com o NEURON, observar chamadas de ferramentas,
+consultar tarefas persistidas, criar workflows por JSON, acompanhar o progresso,
+avançar uma etapa de cada vez e gerenciar aprovações supervisionadas.
+
+### Acesso online pelo GitHub Codespaces
+
+1. Abra o Codespace e sincronize a branch `main`.
+2. No terminal, dentro da raiz do repositório, inicie:
+
+   ```bash
+   HOST=0.0.0.0 npm run dev
+   ```
+
+   Para persistência, o banco indicado em `DATABASE_URL` deve estar ativo.
+3. Na aba **PORTS** do Codespaces, encaminhe a porta **3000** caso necessário.
+4. Mantenha a visibilidade da porta **Private** e clique em **Open in Browser**.
+   O caminho da interface é `/console`, em URL semelhante a
+   `https://NOME-DO-CODESPACE-3000.app.github.dev/console`.
+5. Se houver `CORTEX_API_TOKEN` no servidor, informe-o no campo
+   **Token Bearer** da interface. O token fica apenas na memória desta aba.
+
+**Não confunda** `CORTEX_API_TOKEN` com `LLM_API_KEY`. A chave do modelo
+continua no servidor. O workflow com calculadora funciona em
+`LOCAL_TEST_MODE=true`; para chat com modelo externo, configure o provedor
+e defina `LOCAL_TEST_MODE=false`.
+
+O Codespaces fornece uma URL web de testes enquanto o processo e o Codespace
+estão ativos, mas **não é uma hospedagem permanente**. A porta deve continuar
+privada. Para exposição pública será necessário reforçar autenticação,
+limites de uso e proteção contra abuso.
