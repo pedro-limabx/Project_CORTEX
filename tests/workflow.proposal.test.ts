@@ -147,6 +147,13 @@ describe("NEURON natural-language workflow drafting", () => {
     expect(draft.definition.steps).toHaveLength(2);
     expect(draft.definition.steps[0]?.input).toEqual({ expression: "25*18" });
     expect(draft.definition.steps[1]?.dependsOn).toEqual(["calculo-1"]);
+
+    const chained = await planner.propose("Calcule 25*18 e depois divida o resultado por 3");
+    expect(chained.definition.steps).toHaveLength(2);
+    expect(chained.definition.steps[1]?.dependsOn).toEqual(["calculo-1"]);
+    expect(chained.definition.steps[1]?.input).toEqual({
+      expression: "{{steps.calculo-1.result}}/3"
+    });
     expect(await store.list("user-a", 10)).toEqual([]);
     await expect(planner.propose("Envie um email para alguém"))
       .rejects.toThrow("modo local só propõe workflows de cálculos");
