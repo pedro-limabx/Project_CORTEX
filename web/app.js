@@ -219,13 +219,16 @@ async function sendChatMessage() {
   if (!message) return;
 
   const sendButton = $("#chat-form button[type=submit]");
+  const previousLabel = sendButton.textContent;
   chatSending = true;
   sendButton.disabled = true;
-  hideNotice();
+  sendButton.textContent = "Enviando...";
+  showNotice("Mensagem enviada ao servidor. Aguardando resposta do NEURON...");
 
   try {
     const dryRun = $("#dry-run").checked;
     const result = await api("/api/chat", { method: "POST", body: { message, dryRun } });
+    hideNotice();
     // Only clear the submitted draft, preserving new text typed while waiting.
     if (input.value.trim() === message) input.value = "";
     addMessage("VOCÊ", message, true);
@@ -246,6 +249,7 @@ async function sendChatMessage() {
   } finally {
     chatSending = false;
     sendButton.disabled = false;
+    sendButton.textContent = previousLabel;
   }
 }
 
