@@ -235,9 +235,10 @@ function renderChatInspection(result) {
   textDetail(target, "Objetivo", plan.objective || "—");
   if (result.taskId) {
     textDetail(target, "ID da tarefa", result.taskId);
-    target.append(makeButton("Abrir tarefa ↗", "btn-outline", () => {
+    target.append(makeButton("Abrir tarefa ↗", "btn-outline", async () => {
       state.taskId = result.taskId;
       tab("tasks");
+      await loadTasks();
     }));
   }
   target.append(headline("Etapas"), prettyBlock(plan.steps || []));
@@ -320,10 +321,10 @@ function renderWorkflowDetail(workflow) {
   const meta = node("div", "detail-meta");
   meta.append(statusPill(workflow.status), node("span", "row-meta", "Versão " + workflow.version));
   target.append(meta);
-  const bar = node("div", "progressbar");
-  const fill = node("div");
-  fill.style.width = workflow.progress.percent + "%";
-  bar.append(fill);
+  const bar = node("progress", "progressbar");
+  bar.max = 100;
+  bar.value = workflow.progress.percent;
+  bar.setAttribute("aria-label", "Progresso do workflow");
   target.append(bar, node("div", "progress-caption", workflow.progress.completed + "/" + workflow.progress.total + " etapas · " + workflow.progress.percent + "%"));
   target.append(node("p", "row-meta", "ID: " + workflow.id));
 
