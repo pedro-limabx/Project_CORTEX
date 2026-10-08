@@ -267,6 +267,28 @@ $("#chat-form").addEventListener("submit", (event) => {
 });
 function renderChatInspection(result) {
   const target = clear($("#chat-inspect"));
+  if (result?.workflowReport) {
+    const report = result.workflowReport;
+    const pill = node("div", "detail-meta");
+    pill.append(node("span", "status completed", "Consulta somente leitura"));
+    target.append(pill, headline(report.mode === "single"
+      ? "Acompanhamento do workflow" : "Resumo dos workflows"));
+    if (report.workflows.length === 0) {
+      target.append(info("Nenhum workflow encontrado para esta consulta."));
+    } else {
+      report.workflows.forEach(item => {
+        const box = node("div", "workflow-step");
+        const top = node("div", "workflow-step-top");
+        top.append(node("strong", "", item.objective), statusPill(item.status));
+        box.append(top, node("p", "", item.completed + "/" + item.total
+          + " etapas · " + item.percent + "% concluído"));
+        box.append(node("p", "", item.attention));
+        box.append(node("p", "row-meta", "ID: " + item.id));
+        target.append(box);
+      });
+    }
+    return;
+  }
   if (!result || !result.plan) {
     target.append(info("O agente retornou uma resposta sem plano."));
     return;
@@ -287,6 +309,27 @@ function renderChatInspection(result) {
   target.append(headline("Etapas"), prettyBlock(plan.steps || []));
   target.append(headline("Resultados das ferramentas"), prettyBlock(result.toolResults || []));
 }
+
+// Quick status questions are read-only; never override an unfinished chat draft.
+function askWorkflowStatus(id) {
+  tab("chat");
+  if (chatSending) {
+    showNotice("Aguarde a resposta atual antes de solicitar outro acompanhamento.");
+    return;
+  }
+  const input = $("#message");
+  if (input.value.trim()) {
+    showNotice("Há um rascunho no chat. Envie ou apague sua mensagem antes de consultar os workflows.");
+    input.focus();
+    return;
+  }
+  input.value = id
+    ? "Qual o status do workflow " + id + "?"
+    : "Como estão meus workflows?";
+  void sendChatMessage();
+}
+
+$("#chat-workflow-status").addEventListener("click", () => askWorkflowStatus());
 
 // Workflows
 const presets = {
@@ -429,6 +472,8 @@ function renderWorkflowDetail(workflow) {
       buttons.append(makeButton("Confirmar falhou", "btn-ghost", () => reconcile("failed")));
     }
   }
+  buttons.append(makeButton("✦ Resumir no NEURON", "btn-ghost",
+    () => askWorkflowStatus(workflow.id)));
   if (buttons.childNodes.length) target.append(buttons);
   target.append(headline("Etapas do processo"));
   workflow.steps.forEach(step => target.append(stepView(step)));
