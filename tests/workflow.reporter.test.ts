@@ -9,6 +9,8 @@ import { InMemoryApprovalStore } from "../src/approval/store.js";
 import { ToolExecutor } from "../src/tools/executor.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 import { WorkflowReporter, matchesWorkflowStatusQuestion } from "../src/workflows/reporter.js";
+import { WorkflowEngine } from "../src/workflows/engine.js";
+import { calculatorTool } from "../src/tools/builtin.js";
 import { InMemoryWorkflowStore } from "../src/workflows/store.js";
 import type { WorkflowRun, WorkflowStepStatus } from "../src/workflows/types.js";
 
@@ -80,6 +82,35 @@ describe("CORTEX read-only workflow reporting", () => {
     expect(stored?.steps[0]?.status).toBe("PENDING");
   });
 
+  it("tracks a real workflow from creation through completion", async () => {
+    const store = new InMemoryWorkflowStore();
+    const registry = new ToolRegistry();
+    registry.register(calculatorTool);
+    const permissions = new PermissionEngine(new InMemoryPermissionStore());
+    const approvals = new ApprovalEngine(new InMemoryApprovalStore());
+    const engine = new WorkflowEngine(
+      store, registry, new ToolExecutor(registry), permissions, approvals
+    );
+    const reporter = new WorkflowReporter(store, () => NOW);
+
+    const created = await engine.create("user-a", {
+      objective: "Calcular 7*8 e concluir",
+      steps: [{ id: "calculo", tool: "calculator.evaluate", input: { expression: "7*8" } }]
+    });
+    const before = await reporter.summarize("user-a", { id: created.id });
+    expect(before.workflows[0]).toMatchObject({
+      status: "ACTIVE", completed: 0, percent: 0, nextStepIds: ["calculo"]
+    });
+
+    const execution = await engine.advance("user-a", created.id);
+    expect(execution.status).toBe("COMPLETED");
+    const after = await reporter.summarize("user-a", { id: created.id });
+    expect(after.workflows[0]).toMatchObject({
+      status: "COMPLETED", completed: 1, percent: 100, nextStepIds: []
+    });
+    expect(after.text).toContain("Todas as etapas foram concluídas");
+  });
+
   it("never reveals another user's workflows and handles unknown IDs", async () => {
     const store = new InMemoryWorkflowStore();
     await store.create(workflow(ids.active, "PENDING", "user-a"));
@@ -117,13 +148,16 @@ describe("CORTEX read-only workflow reporting", () => {
       "NEURON, mostre o progresso dos fluxos",
       "Qual o status do workflow " + ids.active + "?",
       "Resumo dos workflows por favor",
-      "Acompanhe meus workflows"
+      "Acompanhe meus workflows",
+      "Relatório dos workflows pendentes",
+      "Quanto falta para terminar meu workflow?"
     ];
     for (const message of accepted) expect(matchesWorkflowStatusQuestion(message)).toBe(true);
 
     const declined = [
       "Calcule 25*18",
       "Crie um workflow e mostre o status",
+      "Cria workflow e mostra status",
       "Execute o próximo workflow",
       "Aprove os workflows",
       "Preciso de ajuda para criar um workflow",
