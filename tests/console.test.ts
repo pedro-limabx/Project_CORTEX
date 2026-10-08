@@ -19,6 +19,8 @@ describe("CORTEX web console", () => {
     expect(index.headers["content-type"]).toContain("text/html");
     expect(index.body).toContain("CORTEX");
     expect(index.body).toContain('src="/console/app.js"');
+    expect(index.body).toContain('id="workflow-objective"');
+    expect(index.body).toContain('id="propose-workflow"');
     expect(index.body).toContain('href="/console/styles.css"');
     expect(index.body).not.toContain("127.0.0.1:3000/api/chat");
 
@@ -26,6 +28,7 @@ describe("CORTEX web console", () => {
     expect(script.statusCode).toBe(200);
     expect(script.headers["content-type"]).toContain("javascript");
     expect(script.body).toContain('api("/api/chat"');
+    expect(script.body).toContain('api("/api/workflows/propose"');
 
     const stylesheet = await app.inject({ method: "GET", url: "/console/styles.css" });
     expect(stylesheet.statusCode).toBe(200);
