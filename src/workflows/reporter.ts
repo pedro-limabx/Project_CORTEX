@@ -89,7 +89,7 @@ export function matchesWorkflowStatusQuestion(message: string): boolean {
   if (message.length > 1000) return false;
   const normalized = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const workflowMentioned = /\b(workflows?|fluxos?)\b/.test(normalized);
-  const asksStatus = /\b(status|progresso|andamento|situacao|acompanhar|acompanhe|acompanhamento|resumo|resuma|resumir|consultar|consulta|mostre|mostrar|liste|listar|como estao|como esta)\b/.test(normalized);
+  const asksStatus = /\b(status|progresso|andamento|situacao|acompanhar|acompanhe|acompanhamento|resumo|resuma|resumir|relatorio|consultar|consulta|mostre|mostrar|liste|listar|como estao|como esta|faltam|falta|restam|resta|ativos|ativo|pendentes|pendente)\b/.test(normalized);
   const actionCommand = /\b(crie|criar|execute|executar|aprove|aprovar|reconciliar|reconcile|excluir|exclua|delete|remover|remova|agendar|iniciar|avance|avancar|continuar|retomar|retome)\b/.test(normalized);
   return workflowMentioned && asksStatus && !actionCommand;
 }
