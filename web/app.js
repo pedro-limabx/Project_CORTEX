@@ -334,10 +334,14 @@ $("#chat-workflow-status").addEventListener("click", () => askWorkflowStatus());
 // Workflows
 const presets = {
   chain: {
-    objective: "Calcular duas expressões em sequência",
+    objective: "Calcular 25*18 e dividir o resultado por 3",
     steps: [
       { id: "primeiro", tool: "calculator.evaluate", input: { expression: "25*18" } },
-      { id: "segundo", tool: "calculator.evaluate", input: { expression: "450/3" }, dependsOn: ["primeiro"] }
+      {
+        id: "segundo", tool: "calculator.evaluate",
+        input: { expression: "{{steps.primeiro.result}}/3" },
+        dependsOn: ["primeiro"]
+      }
     ]
   },
   fork: {
@@ -345,7 +349,7 @@ const presets = {
     steps: [
       { id: "a", tool: "calculator.evaluate", input: { expression: "7*8" } },
       { id: "b", tool: "calculator.evaluate", input: { expression: "12*12" } },
-      { id: "c", tool: "calculator.evaluate", input: { expression: "56+144" }, dependsOn: ["a", "b"] }
+      { id: "c", tool: "calculator.evaluate", input: { expression: "{{steps.a.result}}+{{steps.b.result}}" }, dependsOn: ["a", "b"] }
     ]
   },
   invalid: {
@@ -413,7 +417,12 @@ function stepView(step) {
   if (step.dependsOn && step.dependsOn.length) item.append(node("p", "", "Depende de: " + step.dependsOn.join(", ")));
   if (step.error) item.append(node("p", "", "Erro: " + step.error));
   if (step.approvalId) item.append(node("p", "", "Aprovação: " + step.approvalId));
-  if (step.output !== undefined) item.append(prettyBlock(step.output));
+  if (step.resolvedInput !== undefined) {
+    item.append(node("p", "", "Entrada resolvida utilizada:"), prettyBlock(step.resolvedInput));
+  }
+  if (step.output !== undefined) {
+    item.append(node("p", "", "Resultado produzido:"), prettyBlock(step.output));
+  }
   return item;
 }
 function renderWorkflowDetail(workflow) {
