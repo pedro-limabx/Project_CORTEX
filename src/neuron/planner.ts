@@ -22,7 +22,7 @@ export interface ExecutionPlan {
 export class ExecutionPlanner {
   private readonly steps: PlanStep[] = [];
   private status: PlanStatus = "ACTIVE";
-  private currentStep?: number;
+  private currentStep: number | undefined;
   private revision = 1;
 
   constructor(private readonly objective: string) {}
@@ -84,7 +84,7 @@ export class ExecutionPlanner {
       step => step.status === "PLANNED" || step.status === "AWAITING_APPROVAL"
     );
 
-    if (hasPendingStep || lastStep.status !== "COMPLETED") return;
+    if (hasPendingStep || !lastStep || lastStep.status !== "COMPLETED") return;
 
     const allFailuresRecovered = this.steps.every((step, index) => {
       if (step.status !== "FAILED") return true;
@@ -127,7 +127,7 @@ export class ExecutionPlanner {
     return {
       objective: this.objective,
       status: this.status,
-      currentStep: this.currentStep,
+      ...(this.currentStep !== undefined ? { currentStep: this.currentStep } : {}),
       revision: this.revision,
       steps: this.steps.map(step => ({ ...step }))
     };
