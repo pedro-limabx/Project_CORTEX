@@ -9,9 +9,30 @@
   <script src="/console/app.js" defer></script>
 </head>
 <body>
+<!-- Splash is opt-in from app.js, so a JavaScript failure never traps the user. -->
+<div id="cortex-splash" class="cortex-splash" role="dialog" aria-label="Inicialização do CORTEX" aria-modal="true" hidden>
+  <video id="cortex-splash-video" class="cortex-splash-video" muted autoplay playsinline preload="auto" disablepictureinpicture aria-label="Animação de inicialização">
+    <source src="/console/media/intro.mp4" type="video/mp4">
+  </video>
+  <div id="cortex-splash-fallback" class="cortex-splash-fallback" hidden aria-hidden="true">
+    <span class="splash-symbol">✦</span>
+    <strong>CORTEX</strong>
+    <small>LABORATÓRIO OPERACIONAL</small>
+  </div>
+  <div class="splash-bottom">
+    <span>INICIALIZANDO NEURON <span class="splash-loading" aria-hidden="true"></span></span>
+    <button type="button" id="cortex-splash-skip" class="splash-skip">Pular animação →</button>
+  </div>
+</div>
 <div class="app">
   <aside class="sidebar">
-    <div class="brand"><div class="brand-icon">✦</div><div><strong>CORTEX</strong><small>LABORATÓRIO OPERACIONAL</small></div></div>
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">
+        <span class="brand-fallback">✦</span>
+        <img src="/console/media/logo.webp" data-cortex-logo alt="" width="54" height="54">
+      </div>
+      <div><strong>CORTEX</strong><small>LABORATÓRIO OPERACIONAL</small></div>
+    </div>
     <div class="nav-caption">NAVEGAÇÃO</div>
     <nav aria-label="Navegação">
       <button class="nav-button active" data-tab="overview">◈ <span>Visão geral</span></button>

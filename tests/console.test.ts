@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import { readFile } from "node:fs/promises";
 import { Script, runInNewContext } from "node:vm";
 import { resolve } from "node:path";
-import { registerConsole } from "../src/console.js";
+import { parseVideoRange, registerConsole } from "../src/console.js";
 
 describe("CORTEX web console", () => {
   it("serves the dashboard and its same-origin assets", async () => {
@@ -19,6 +19,11 @@ describe("CORTEX web console", () => {
     expect(index.headers["content-type"]).toContain("text/html");
     expect(index.body).toContain("CORTEX");
     expect(index.body).toContain('src="/console/app.js"');
+    expect(index.body).toContain('id="cortex-splash"');
+    expect(index.body).toContain('id="cortex-splash-video"');
+    expect(index.body).toContain('id="cortex-splash-skip"');
+    expect(index.body).toContain('src="/console/media/logo.webp"');
+    expect(index.body).toContain('src="/console/media/intro.mp4"');
     expect(index.body).toContain('id="workflow-objective"');
     expect(index.body).toContain('value="conditional"');
     expect(index.body).toContain('value="recovery"');
@@ -49,6 +54,9 @@ describe("CORTEX web console", () => {
     expect(script.statusCode).toBe(200);
     expect(script.headers["content-type"]).toContain("javascript");
     expect(script.body).toContain('api("/api/chat"');
+    expect(script.body).toContain('function startCortexSplash()');
+    expect(script.body).toContain('video.addEventListener("ended", finish');
+    expect(script.body).toContain('playing.catch(showFallback)');
     expect(script.body).toContain('api("/api/reminders"');
     expect(script.body).toContain('function loadReminders()');
     expect(script.body).toContain('api("/api/workflows/propose"');
@@ -92,6 +100,8 @@ describe("CORTEX web console", () => {
     expect(stylesheet.statusCode).toBe(200);
     expect(stylesheet.headers["content-type"]).toContain("text/css");
     expect(stylesheet.body).toContain(".monitor-bar-track");
+    expect(stylesheet.body).toContain(".cortex-splash-video");
+    expect(stylesheet.body).toContain(".splash-skip");
     expect(stylesheet.body).toContain(".operational-alert.critical");
     expect(stylesheet.body).toContain(".nav-alert-count[hidden]");
     expect(stylesheet.body).toContain(".monitor-alert.critical");
@@ -101,6 +111,7 @@ describe("CORTEX web console", () => {
       expect(response.headers["cache-control"]).toBe("no-store");
       expect(response.headers["x-content-type-options"]).toBe("nosniff");
       expect(response.headers["content-security-policy"]).toContain("connect-src 'self'");
+      expect(response.headers["content-security-policy"]).toContain("media-src 'self'");
       expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'none'");
     }
 

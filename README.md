@@ -811,3 +811,8 @@ Validação: `npm run typecheck && npm test && npm run build`.
 ### CORTEX V10 — Monitoramento persistente no Node.js
 
 A V10 acrescenta o monitor autônomo (inicialmente desativado), com configuração, histórico e notificações no PostgreSQL. Funciona com o painel fechado enquanto Node.js e PostgreSQL permanecem ativos. Consulte [o guia da V10](docs/AUTONOMOUS_MONITORING.md) para API, ativação, limitações e testes. A V8/V9 continua independente e compatível.
+
+
+### CORTEX — Logo e tela de abertura
+
+O console agora suporta a logo do cérebro ao lado de **CORTEX / LABORATÓRIO OPERACIONAL** e uma splash screen com o vídeo de abertura ao carregar a página. Inclui botão para pular, suporte a reprodução silenciosa, fallback se o MP4 não estiver instalado e limite de espera contra tela bloqueada. Para instalar as mídias originais da conversa, consulte [o guia de identidade visual](docs/BRANDING.md). As mídias são arquivos separados do código e devem estar em `web/assets/` no Codespaces/deploy.

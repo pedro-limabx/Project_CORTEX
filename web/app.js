@@ -1,5 +1,50 @@
 "use strict";
 
+// The startup video is presentation only. It never controls authentication,
+// APIs or backend tasks, and cannot trap users if autoplay/media fails.
+function startCortexSplash() {
+  const splash = document.querySelector("#cortex-splash");
+  const video = document.querySelector("#cortex-splash-video");
+  const fallback = document.querySelector("#cortex-splash-fallback");
+  const skip = document.querySelector("#cortex-splash-skip");
+  if (!splash || !video || !skip) return;
+
+  document.querySelectorAll("[data-cortex-logo]").forEach(image => {
+    image.addEventListener("error", () => { image.hidden = true; });
+  });
+
+  let finished = false;
+  let watchdog;
+  let fallbackTimer;
+  function finish() {
+    if (finished) return;
+    finished = true;
+    window.clearTimeout(watchdog);
+    window.clearTimeout(fallbackTimer);
+    video.pause();
+    splash.hidden = true;
+    document.body.classList.remove("cortex-opening");
+  }
+  function showFallback() {
+    if (finished) return;
+    video.hidden = true;
+    if (fallback) fallback.hidden = false;
+    fallbackTimer = window.setTimeout(finish, 1800);
+  }
+  skip.addEventListener("click", finish, {once: true});
+  video.addEventListener("ended", finish, {once: true});
+  video.addEventListener("error", showFallback, {once: true});
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+
+  splash.hidden = false;
+  document.body.classList.add("cortex-opening");
+  watchdog = window.setTimeout(finish, 15_000);
+  video.muted = true; // Required for reliable autoplay on modern browsers.
+  const playing = video.play();
+  if (playing && typeof playing.catch === "function") playing.catch(showFallback);
+}
+startCortexSplash();
+
 // Interface experimental. Nenhum token é persistido, e todo texto remoto usa textContent.
 const state = {
   token: "",

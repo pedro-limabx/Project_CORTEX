@@ -284,3 +284,29 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 .status.due { color:#ffdd9c;border-color:#7b613c;background:#3d3022 }
 .status.done { color:#80e3b9;border-color:#245e4c;background:#143a31 }
 .status.cancelled { color:#a5adba;border-color:#495365;background:#29303b }
+
+/* CORTEX brand / opening film. Uses only fixed local media URLs. */
+.brand { gap:11px;padding-left:7px;padding-right:7px }
+.brand-icon { position:relative;display:grid;place-items:center;flex:none;width:54px;height:54px;overflow:hidden;border:none;background:#000;border-radius:50%;box-shadow:0 0 17px #57cce013 }
+.brand-icon img { position:absolute;inset:0;width:100%;height:100%;object-fit:contain;mix-blend-mode:screen }
+.brand-fallback { color:var(--blue);font-size:25px }
+.brand strong { font-size:19px }
+.brand small { letter-spacing:.08em;font-size:8px }
+body.cortex-opening { overflow:hidden }
+.cortex-splash { position:fixed;inset:0;z-index:9999;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden }
+.cortex-splash[hidden],.cortex-splash-video[hidden],.cortex-splash-fallback[hidden] { display:none!important }
+.cortex-splash-video { display:block;width:100%;height:100%;object-fit:contain;background:#000 }
+.cortex-splash::after { content:"";position:absolute;left:0;right:0;bottom:0;height:170px;pointer-events:none;background:linear-gradient(transparent,#000c) }
+.cortex-splash-fallback { display:flex;flex-direction:column;align-items:center;gap:12px;letter-spacing:.24em;animation:cortex-boot-pulse 1.8s ease-in-out infinite }
+.cortex-splash-fallback .splash-symbol { width:100px;height:100px;display:grid;place-items:center;border-radius:50%;border:1px solid #3facc0;color:#7de6f3;font-size:55px;box-shadow:0 0 40px #18bed055 }
+.cortex-splash-fallback strong { font-size:clamp(28px,6vw,52px);letter-spacing:.32em }
+.cortex-splash-fallback small { color:#81cbd9;font-size:10px }
+.splash-bottom { position:absolute;z-index:2;bottom:clamp(20px,4vw,48px);left:clamp(20px,4vw,48px);right:clamp(20px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;font-size:10px;letter-spacing:.18em;color:#a3d8df }
+.splash-skip { padding:11px 16px;border-radius:9px;border:1px solid #3c6b79;background:#101e29d9;color:#d9f7ff;font-weight:700;font-size:12px;letter-spacing:0 }
+.splash-skip:hover { background:#24495c }
+.splash-skip:focus-visible { outline:2px solid #8eecf3;outline-offset:3px }
+.splash-loading::after { content:".";animation:cortex-boot-dots 1.1s steps(3,end) infinite }
+@keyframes cortex-boot-dots { 0% {content:"."} 50% {content:".."} 100% {content:"..."} }
+@keyframes cortex-boot-pulse { 0%,100%{opacity:.55;transform:scale(.98)}50%{opacity:1;transform:scale(1.02)} }
+@media (prefers-reduced-motion:reduce) { .cortex-splash-fallback { animation:none } }
+@media (max-width:640px) { .splash-bottom { justify-content:center;text-align:center } }
