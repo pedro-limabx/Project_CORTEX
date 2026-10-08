@@ -76,6 +76,12 @@
         <div class="columns workflow-columns">
           <article class="card">
             <div class="card-head"><h2>Novo workflow</h2><span class="overline">EDITOR</span></div>
+            <div class="proposal-box">
+              <label class="field-label" for="workflow-objective">Descreva o processo para o NEURON</label>
+              <textarea id="workflow-objective" rows="3" maxlength="1000" placeholder="Ex.: Calcule 25*18 e depois 450/3."></textarea>
+              <button id="propose-workflow" type="button" class="btn btn-outline">✦ Gerar proposta (não executa)</button>
+              <p id="proposal-feedback" class="hint" role="status" aria-live="polite">O NEURON vai preencher o editor abaixo. Revise antes de criar o workflow.</p>
+            </div>
             <label class="field-label" for="preset">Modelo inicial</label>
             <select id="preset">
               <option value="chain">Dois cálculos em sequência</option>
