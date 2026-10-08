@@ -47,7 +47,10 @@ function reportItem(run: WorkflowRun, now: number): WorkflowReportItem {
   } else if (status === "FAILED") {
     attention = "O fluxo falhou; exige análise antes de qualquer novo plano.";
   } else if (status === "COMPLETED") {
-    attention = "Todas as etapas foram concluídas.";
+    attention = snapshot.progress.skipped > 0
+      ? "Fluxo finalizado: " + snapshot.progress.completed + " etapas executadas e "
+        + snapshot.progress.skipped + " ignoradas pelas condições."
+      : "Todas as etapas foram concluídas.";
   } else {
     const ready = readyWorkflowSteps(run);
     attention = ready.length
