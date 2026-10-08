@@ -20,6 +20,7 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain("CORTEX");
     expect(index.body).toContain('src="/console/app.js"');
     expect(index.body).toContain('id="workflow-objective"');
+    expect(index.body).toContain('value="conditional"');
     expect(index.body).toContain('id="propose-workflow"');
     expect(index.body).toContain('id="chat-workflow-status"');
     expect(index.body).toContain('href="/console/styles.css"');
@@ -32,6 +33,9 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain('api("/api/workflows/propose"');
     expect(script.body).toContain("{{steps.primeiro.result}}/3");
     expect(script.body).toContain("{{steps.a.result}}+{{steps.b.result}}");
+    expect(script.body).toContain('dependsMode: "settled"');
+    expect(script.body).toContain('SKIPPED: "Ignorada"');
+    expect(script.body).toContain("Não executada: ");
     expect(script.body).toContain("Entrada resolvida utilizada:");
     expect(script.body).toContain('function askWorkflowStatus(id)');
     expect(script.body).toContain("result?.workflowReport");
