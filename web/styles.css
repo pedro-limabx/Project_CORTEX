@@ -109,7 +109,8 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 .message.me { align-self:flex-end;background:#123747;border-color:#27647e }
 .message-label { display:block;margin-bottom:7px;font-size:10px;color:#77cadd;letter-spacing:.1em;font-weight:850 }
 #chat-form { border-top:1px solid #253545;padding-top:16px }
-.compose-bottom { display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:11px }
+.compose-bottom { display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap }
+.keyboard-hint { color:#8399aa;font-size:11px;white-space:nowrap }
 .check { display:flex;align-items:center;gap:7px;color:#9eb1bf;font-size:12px;cursor:pointer }
 .check input { accent-color:var(--blue);height:15px;width:15px }
 .code-editor { font-family:ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:2;font-size:12px;min-height:320px;color:#a5e5f6 }
