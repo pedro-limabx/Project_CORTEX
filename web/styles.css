@@ -121,8 +121,10 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 .status.failed,.status.error { background:#3b222b;color:#f2a1a9;border-color:#75424f }
 .status.waiting_approval,.status.awaiting_approval,.status.needs_reconciliation,.status.replanning { background:#372f20;color:#f5d18b;border-color:#655333 }
 .status.running,.status.active,.status.planned { background:#18324b;color:#8ccaf7;border-color:#265479 }
-.progressbar { height:7px;background:#223445;overflow:hidden;border-radius:99px;margin:12px 0 8px }
-.progressbar div { background:linear-gradient(90deg,#41aecb,#60e6c4);height:100%;border-radius:99px;max-width:100% }
+.progressbar { display:block;width:100%;appearance:none;height:7px;background:#223445;overflow:hidden;border:0;border-radius:99px;margin:12px 0 8px }
+.progressbar::-webkit-progress-bar { background:#223445;border-radius:99px }
+.progressbar::-webkit-progress-value { background:linear-gradient(90deg,#41aecb,#60e6c4);border-radius:99px }
+.progressbar::-moz-progress-bar { background:linear-gradient(90deg,#41aecb,#60e6c4);border-radius:99px }
 .progress-caption { display:flex;justify-content:space-between;gap:10px;color:#9cb1c0;font-size:11px }
 .detail-title { font-size:14px;font-weight:700;line-height:1.5;margin:0 0 13px;word-break:break-word }
 .detail-meta { display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:11px }
