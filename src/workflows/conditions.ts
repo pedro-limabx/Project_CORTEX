@@ -46,6 +46,11 @@ export function evaluateWorkflowBranches(
   current: WorkflowRun,
   timestamp: string = new Date().toISOString()
 ): WorkflowRun | undefined {
+  // An unresolved or failed external action takes precedence over all branch
+  // decisions. Reconciliation or an operator review must happen first.
+  if (current.steps.some(step => step.status === "FAILED" || step.status === "RUNNING")) {
+    return undefined;
+  }
   const next = structuredClone(current);
   let changed = false;
   let again = true;
