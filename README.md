@@ -290,3 +290,43 @@ etapa** executa no máximo um passo, respeitando as aprovações de risco.
   passos**: cada entrada precisa estar definida antes da execução.
 - Rascunhos gerados não substituem a revisão humana. Operações de
   alto risco continuam bloqueadas pelas políticas de permissão/aprovação.
+
+
+### Acompanhamento de workflows pelo NEURON (somente leitura)
+
+O CORTEX consulta workflows persistidos pelo usuário configurado no servidor
+e fornece um resumo determinístico do progresso. Não executa ferramentas,
+não consome aprovações e não inventa resultados de tarefas.
+
+No **/console → NEURON Chat**, clique em **Status dos workflows**, ou escreva:
+
+- `Como estão meus workflows?` — consulta até 10 fluxos recentes;
+- `Qual o status do workflow SEU_UUID?` — consulta um fluxo específico;
+- `Mostre o progresso dos fluxos` — exibe a situação e os bloqueios.
+
+Na aba **Workflows v2**, selecione um workflow e use
+**Resumir no NEURON** para consultar aquele fluxo no chat.
+
+Também está disponível a API REST protegida pelo mesmo token Bearer:
+
+```http
+GET /api/workflows/summary
+GET /api/workflows/summary?limit=20
+GET /api/workflows/summary?id=UUID_DO_WORKFLOW
+```
+
+A resposta inclui `readOnly: true`, um resumo em português e os campos
+`status`, `percent`, `completed`, `total`, `nextStepIds` e `attention`
+para cada workflow. As contagens consideram **somente os workflows
+efetivamente consultados**, com limite de 20 por chamada.
+
+Os estados de aprovação e falha indicam próximos passos que dependem
+de decisões humanas. Quando uma etapa consta como `RUNNING`, o resumo
+diferencia execução recente de um resultado antigo potencialmente incerto;
+nenhum desses casos dispara execução ou reconciliação automática.
+
+**Limites:** consultas explícitas de status são reconhecidas pela camada
+determinística do CORTEX, tanto no modo local quanto com LLM externo.
+Solicitações de criação/execução não são reinterpretadas como consultas.
+Isto não é um monitoramento contínuo em segundo plano nem um sistema
+de alertas proativos; o resumo é atualizado quando o usuário consulta.
