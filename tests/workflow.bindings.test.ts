@@ -109,7 +109,7 @@ describe("CORTEX v3 output bindings", () => {
   it("rejects undeclared references, malformed paths and unsafe properties during validation", async () => {
     const { engine } = harness();
     const cases: unknown[] = [
-      { value: direct("first", "value") },
+      { value: direct("outside", "value") },
       { value: direct("first", "constructor") },
       { value: direct("first", "value.__proto__") },
       { value: { $fromStep: "first", path: "value", extra: 1 } },
