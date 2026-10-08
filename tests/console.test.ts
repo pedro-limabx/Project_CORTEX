@@ -30,6 +30,9 @@ describe("CORTEX web console", () => {
     expect(script.headers["content-type"]).toContain("javascript");
     expect(script.body).toContain('api("/api/chat"');
     expect(script.body).toContain('api("/api/workflows/propose"');
+    expect(script.body).toContain("{{steps.primeiro.result}}/3");
+    expect(script.body).toContain("{{steps.a.result}}+{{steps.b.result}}");
+    expect(script.body).toContain("Entrada resolvida utilizada:");
     expect(script.body).toContain('function askWorkflowStatus(id)');
     expect(script.body).toContain("result?.workflowReport");
 
