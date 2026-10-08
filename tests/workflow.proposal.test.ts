@@ -118,6 +118,25 @@ describe("NEURON natural-language workflow drafting", () => {
     await expect(malformed.planner.propose("")).rejects.toThrow("Provide an objective");
   });
 
+  it("accepts a fully fenced JSON draft and reports missing LLM configuration", async () => {
+    const example = {
+      objective: "Calcular 2+2",
+      steps: [{ id: "s1", tool: "calculator.evaluate", input: { expression: "2+2" } }]
+    };
+    const fence = String.fromCharCode(96).repeat(3);
+    const valid = harness({
+      async chat() {
+        return { provider: "mock", text: fence + "json\n" + JSON.stringify(example) + "\n" + fence };
+      }
+    });
+    expect((await valid.planner.propose("Calcular 2+2")).definition.steps).toHaveLength(1);
+    const unavailable = harness({
+      async chat() { return { provider: "unconfigured", text: "LLM sem chave" }; }
+    });
+    await expect(unavailable.planner.propose("Planeje uma operação"))
+      .rejects.toThrow("Provedor de IA não configurado");
+  });
+
   it("supports deterministic calculator drafts in local mode without impersonating an LLM", async () => {
     const provider: LLMProvider = {
       async chat() { throw new Error("Local demo must not call an LLM"); }
