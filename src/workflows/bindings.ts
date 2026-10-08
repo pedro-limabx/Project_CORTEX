@@ -132,6 +132,23 @@ export function inspectStepInput(
   return { input: jsonSafe(validated, MAX_JSON_BYTES), hasBindings };
 }
 
+/**
+ * Recovery handlers cannot access the (nonexistent) output of their failed
+ * source. Reject that wiring while building the workflow rather than after
+ * operator authorization.
+ */
+export function referencesStepOutput(value: unknown, source: string): boolean {
+  if (typeof value === "string") {
+    return [...value.matchAll(REFS)].some(match => match[1] === source);
+  }
+  if (isReference(value)) return value.$fromStep === source;
+  if (Array.isArray(value)) return value.some(item => referencesStepOutput(item, source));
+  if (value && typeof value === "object") {
+    return Object.values(value).some(item => referencesStepOutput(item, source));
+  }
+  return false;
+}
+
 function containsBindings(value: unknown, depth: number): boolean {
   if (depth > MAX_DEPTH) return false;
   if (typeof value === "string") return value.includes("{{steps.");
