@@ -12,6 +12,7 @@ export interface WorkflowReportItem {
   objective: string;
   status: ReturnType<typeof workflowStatus>;
   completed: number;
+  skipped: number;
   total: number;
   percent: number;
   nextStepIds: string[];
@@ -59,6 +60,7 @@ function reportItem(run: WorkflowRun, now: number): WorkflowReportItem {
     objective: run.objective,
     status,
     completed: snapshot.progress.completed,
+    skipped: snapshot.progress.skipped,
     total: snapshot.progress.total,
     percent: snapshot.progress.percent,
     nextStepIds: snapshot.progress.ready,
@@ -78,7 +80,7 @@ const statusText: Record<WorkflowReportItem["status"], string> = {
 function formatItem(item: WorkflowReportItem): string {
   return [
     `• ${item.objective} (ID: ${item.id})`,
-    `  Situação: ${statusText[item.status]}; progresso: ${item.completed}/${item.total} etapas (${item.percent}%).`,
+    `  Situação: ${statusText[item.status]}; ${item.completed} executadas, ${item.skipped} ignoradas de ${item.total} etapas (${item.percent}% resolvido).`,
     `  ${item.attention}`
   ].join("\n");
 }
