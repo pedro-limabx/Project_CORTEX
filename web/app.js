@@ -492,6 +492,51 @@ function stepView(step) {
   }
   return item;
 }
+const workflowEventLabels = {
+  WORKFLOW_CREATED: "Workflow criado",
+  STEP_STATUS_CHANGED: "Etapa mudou de estado",
+  RECOVERY_AUTHORIZED: "Recuperação autorizada (sem execução)"
+};
+
+function renderWorkflowTimelineEvents(target, events) {
+  if (!events.length) {
+    target.append(info("Não há eventos históricos registrados para este workflow."));
+    return;
+  }
+  events.forEach(event => {
+    const row = node("div", "timeline-event");
+    const label = workflowEventLabels[event.kind] || "Evento do workflow";
+    const heading = node("div", "timeline-event-head");
+    heading.append(node("strong", "", "#" + event.seq + " · " + label));
+    heading.append(node("span", "row-meta", dateTime(event.at)));
+    row.append(heading);
+    if (event.stepId) row.append(node("p", "", "Etapa: " + event.stepId
+      + (event.tool ? " · " + event.tool : "")));
+    if (event.from && event.to) {
+      row.append(node("p", "row-meta",
+        (statusLabels[event.from] || event.from) + " → " + (statusLabels[event.to] || event.to)));
+    }
+    row.append(node("p", "row-meta", "Origem: " + ({
+      engine: "Motor do CORTEX", routing: "Decisão de fluxo", operator: "Confirmação humana"
+    }[event.source] || "Registro interno")));
+    target.append(row);
+  });
+}
+
+function renderWorkflowDiagnostic(target, timeline) {
+  clear(target);
+  const diagnostic = timeline.diagnostic;
+  target.append(node("p", "diagnostic-label", "Diagnóstico atual · " + timeline.status));
+  target.append(node("p", "", diagnostic.message));
+  target.append(node("p", "hint", "Próxima ação: " + diagnostic.nextAction));
+  if (!timeline.historyComplete) {
+    target.append(node("p", "hint",
+      "Histórico parcial: este workflow foi criado antes do registro de eventos ou ultrapassou o limite de retenção."));
+  }
+  target.append(headline("Eventos registrados (mais recentes primeiro)"));
+  renderWorkflowTimelineEvents(target, timeline.events || []);
+}
+
 function renderWorkflowDetail(workflow) {
   const target = clear($("#workflow-detail"));
   if (!workflow) return;
@@ -598,6 +643,23 @@ function renderWorkflowDetail(workflow) {
   if (buttons.childNodes.length) target.append(buttons);
   target.append(headline("Etapas do processo"));
   workflow.steps.forEach(step => target.append(stepView(step)));
+
+  target.append(headline("Linha do tempo · últimos eventos"));
+  const recentEvents = (workflow.events || []).slice(-8).reverse();
+  renderWorkflowTimelineEvents(target, recentEvents);
+  if (!workflow.events?.length || workflow.events[0]?.kind !== "WORKFLOW_CREATED") {
+    target.append(node("p", "hint",
+      "Histórico parcial ou indisponível para versões antigas; não são reconstruídos eventos inexistentes."));
+  }
+  const diagnostics = node("div", "workflow-diagnostics");
+  target.append(makeButton("◷ Consultar diagnóstico detalhado", "btn-outline", async () => {
+    const timeline = await api(
+      "/api/workflows/" + encodeURIComponent(workflow.id) + "/timeline?limit=100"
+    );
+    renderWorkflowDiagnostic(diagnostics, timeline);
+    showNotice("Diagnóstico consultado em modo somente leitura.", "success");
+  }));
+  target.append(diagnostics);
 }
 
 // Persisted tasks

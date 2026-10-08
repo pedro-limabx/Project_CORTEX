@@ -288,6 +288,21 @@ app.get("/api/workflows/:id", { preHandler: authenticate }, async (request, repl
   }
 });
 
+// Owner-scoped metadata-only timeline. Never invokes the executor, LLM or approvals.
+app.get("/api/workflows/:id/timeline", { preHandler: authenticate }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const query = request.query as { limit?: unknown };
+  const limit = query.limit === undefined ? 50 : Number(query.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return reply.code(400).send({ error: "limit must be an integer from 1 to 100" });
+  }
+  try {
+    return await workflows.timeline(config.CORTEX_USER_ID, id, limit);
+  } catch (error) {
+    return workflowError(reply, error);
+  }
+});
+
 app.post("/api/workflows/:id/advance", { preHandler: authenticate }, async (request, reply) => {
   const { id } = request.params as { id: string };
   const body = request.body && typeof request.body === "object"

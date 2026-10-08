@@ -571,3 +571,50 @@ Content-Type: application/json
   **resolvidas**, não percentual de sucesso.
 - A recuperação é supervisionada; não foram adicionadas novas retentativas
   automáticas, processos em segundo plano nem transações exatamente uma vez.
+
+### CORTEX v6 — Linha do tempo e diagnóstico de workflows
+
+O motor agora registra eventos de alterações de estado junto ao próprio
+workflow, na **mesma gravação com controle otimista de versão (CAS)**. Isso
+permite acompanhar os acontecimentos que foram persistidos sem confiar em
+descrições geradas pelo LLM.
+
+Cada registro inclui apenas o número sequencial, momento, origem, tipo de evento,
+etapa/ferramenta e status anterior/novo (quando aplicável). Os eventos possíveis
+são `WORKFLOW_CREATED`, `STEP_STATUS_CHANGED` e `RECOVERY_AUTHORIZED`.
+**Não** são copiados parâmetros, resultados, identificadores de aprovação,
+mensagens de erro, credenciais nem justificativas do operador para a trilha.
+Uma transição para `RUNNING` representa a reserva persistida da etapa, e
+**não** comprova que o efeito externo foi efetivamente realizado.
+
+No **/console → Workflows v2**, escolha uma execução: a parte inferior apresenta
+os últimos oito eventos, com data, etapa, estado e origem da decisão.
+Clique em **Consultar diagnóstico detalhado** para acessar a leitura mais recente,
+a próxima ação indicada e até 100 eventos sem iniciar qualquer ferramenta.
+
+A API REST também expõe uma consulta autenticada por identidade do servidor:
+
+```http
+GET /api/workflows/UUID_DO_WORKFLOW/timeline
+GET /api/workflows/UUID_DO_WORKFLOW/timeline?limit=100
+```
+
+A resposta retorna `workflowId`, `status`, `version`, `progress`,
+`diagnostic` (`level`, `message`, `nextAction`), `events` ordenados
+do mais recente para o mais antigo, `historyComplete` e `readOnly: true`.
+O limite é de 1 a 100 eventos por consulta; o armazenamento mantém os
+últimos **256** eventos por workflow. Eventos antigos são descartados quando
+esse limite é atingido. A sequência permanece crescente.
+
+**Histórico incompleto:** workflows criados antes desta atualização não
+possuem eventos anteriores preservados. O CORTEX não fabrica esses registros.
+O campo `historyComplete` retorna `false` se a criação não estiver mais no
+histórico (por antiguidade ou truncamento).
+
+**Escopo e limites de segurança:** a consulta é somente leitura, filtra por
+usuário autorizado, não chama o LLM nem executa ferramentas. Os eventos são
+persistidos no mesmo registro do workflow e respeitam seu controle de versão,
+mas **não constituem uma trilha de auditoria imutável ou à prova de adulteração**.
+Para aplicações financeiras, automação física ou integrações externas, serão
+necessários logs separados, controle de acesso granular, retenção, evidências
+de execução e mecanismos de idempotência.

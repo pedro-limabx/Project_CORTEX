@@ -38,6 +38,27 @@ export interface WorkflowRecoveryAuthorization {
   note: string;
 }
 
+export type WorkflowEventSource = "engine" | "routing" | "operator";
+export type WorkflowEventKind =
+  | "WORKFLOW_CREATED"
+  | "STEP_STATUS_CHANGED"
+  | "RECOVERY_AUTHORIZED";
+
+/**
+ * Deliberately metadata-only. Inputs, outputs, approval IDs and operator notes
+ * are excluded to prevent accidental exposure in diagnostic exports.
+ */
+export interface WorkflowEvent {
+  seq: number;
+  at: string;
+  kind: WorkflowEventKind;
+  source: WorkflowEventSource;
+  stepId?: string;
+  tool?: string;
+  from?: WorkflowStepStatus;
+  to?: WorkflowStepStatus;
+}
+
 export interface WorkflowStep {
   id: string;
   tool: string;
@@ -67,6 +88,8 @@ export interface WorkflowRun {
   updatedAt: string;
   steps: WorkflowStep[];
   recoveries?: WorkflowRecoveryAuthorization[];
+  /** Bounded and stored atomically with each workflow CAS transition. */
+  events?: WorkflowEvent[];
 }
 
 export class WorkflowInputError extends Error {}

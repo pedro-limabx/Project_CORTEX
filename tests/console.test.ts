@@ -41,6 +41,11 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain('"/recovery"');
     expect(script.body).toContain('confirmed: true, note');
     expect(script.body).toContain('workflow.recoveries?.length');
+    expect(script.body).toContain('function renderWorkflowTimelineEvents(target, events)');
+    expect(script.body).toContain('function renderWorkflowDiagnostic(target, timeline)');
+    expect(script.body).toContain('"/timeline?limit=100"');
+    expect(script.body).toContain('Histórico parcial');
+    expect(script.body).toContain('Consultar diagnóstico detalhado');
     expect(script.body).toContain("Não executada: ");
     expect(script.body).toContain("Entrada resolvida utilizada:");
     expect(script.body).toContain('function askWorkflowStatus(id)');

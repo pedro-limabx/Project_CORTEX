@@ -9,6 +9,7 @@ import { ToolRegistry } from "../tools/registry.js";
 import type { WorkflowStore } from "./store.js";
 import { inspectStepInput, resolveStepInput, referencesStepOutput } from "./bindings.js";
 import { evaluateWorkflowBranches } from "./conditions.js";
+import { appendWorkflowEvents, workflowCreatedEvent, workflowTimeline } from "./timeline.js";
 import {
   parseWorkflowDefinition,
   readyWorkflowSteps,
@@ -18,7 +19,8 @@ import {
   WorkflowInputError,
   WorkflowNotFoundError,
   type WorkflowRun,
-  type WorkflowStep
+  type WorkflowStep,
+  type WorkflowEventSource
 } from "./types.js";
 
 const RECONCILIATION_GRACE_MS = 30_000;
@@ -110,7 +112,8 @@ export class WorkflowEngine {
       version: 1,
       createdAt: now,
       updatedAt: now,
-      steps
+      steps,
+      events: [workflowCreatedEvent(now)]
     };
     await this.store.create(run);
     return workflowResponse(run);
@@ -123,6 +126,11 @@ export class WorkflowEngine {
 
   async list(userId: string, limit: number) {
     return (await this.store.list(userId, limit)).map(workflowResponse);
+  }
+
+  /** Owner-scoped and read-only diagnostic report, without calling tools. */
+  async timeline(userId: string, id: string, limit?: number) {
+    return workflowTimeline(await this.load(userId, id), limit);
   }
 
   private async load(userId: string, id: string): Promise<WorkflowRun> {
@@ -138,7 +146,8 @@ export class WorkflowEngine {
   private async transition(
     current: WorkflowRun,
     stepId: string,
-    patch: Partial<WorkflowStep>
+    patch: Partial<WorkflowStep>,
+    source: WorkflowEventSource = "engine"
   ): Promise<WorkflowRun> {
     const next = structuredClone(current);
     const step = next.steps.find(item => item.id === stepId);
@@ -146,6 +155,7 @@ export class WorkflowEngine {
     Object.assign(step, patch);
     next.version++;
     next.updatedAt = new Date().toISOString();
+    appendWorkflowEvents(current, next, source, next.updatedAt);
     const updated = await this.store.update(current.userId, current.version, next);
     if (!updated) throw new WorkflowConflictError("Workflow was modified by another request");
     return next;
@@ -160,6 +170,7 @@ export class WorkflowEngine {
     if (!decided) return run;
     decided.version = run.version + 1;
     decided.updatedAt = new Date().toISOString();
+    appendWorkflowEvents(run, decided, "routing", decided.updatedAt);
     if (!await this.store.update(run.userId, run.version, decided)) {
       throw new WorkflowConflictError("Workflow was modified by another request");
     }
@@ -354,6 +365,7 @@ export class WorkflowEngine {
     ];
     next.version = run.version + 1;
     next.updatedAt = new Date().toISOString();
+    appendWorkflowEvents(run, next, "operator", next.updatedAt);
     const saved = await this.store.update(userId, run.version, next);
     if (!saved) throw new WorkflowConflictError("Workflow was modified by another request");
     // Atomic CAS owns authorization. Settling is deterministic, and if the
@@ -375,7 +387,7 @@ export class WorkflowEngine {
       status: outcome === "completed" ? "COMPLETED" : "FAILED",
       ...(outcome === "failed" ? { error: "Operator verified the step did not complete" } : {}),
       finishedAt: new Date().toISOString()
-    });
+    }, "operator");
     return workflowResponse(await this.settle(updated));
   }
 }

@@ -188,3 +188,10 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 @media (prefers-reduced-motion:reduce) {
   *,*::before,*::after { animation-duration:.01ms !important;transition-duration:.01ms !important }
 }
+/* Workflow observability: metadata-only chronological events. */
+.timeline-event { border-left:2px solid #385d74;padding:10px 12px;margin:8px 0;background:#111e2b;border-radius:0 9px 9px 0;overflow-wrap:anywhere }
+.timeline-event-head { display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px }
+.timeline-event p { margin:6px 0 0;font-size:12px }
+.workflow-diagnostics { margin-top:14px;border-top:1px solid #2c3a4b;padding-top:12px }
+.workflow-diagnostics:empty { display:none }
+.diagnostic-label { font-size:12px;font-weight:750;color:#92d2e8;letter-spacing:.03em }
