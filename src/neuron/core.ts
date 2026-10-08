@@ -362,6 +362,7 @@ export class NeuronCore {
             memories: memories.length,
             steps,
             toolResults,
+            ...taskIdentity(),
             plan: planner.snapshot()
           };
         }
