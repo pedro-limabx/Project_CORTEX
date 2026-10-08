@@ -59,6 +59,7 @@ export function evaluateWorkflowBranches(
   const next = structuredClone(current);
   let changed = false;
   let again = true;
+  let conditionFailed = false;
 
   const skip = (step: WorkflowStep, reason: string) => {
     step.status = "SKIPPED";
@@ -73,6 +74,7 @@ export function evaluateWorkflowBranches(
     step.finishedAt = timestamp;
     changed = true;
     again = false;
+    conditionFailed = true;
   };
 
   while (again) {
@@ -131,7 +133,7 @@ export function evaluateWorkflowBranches(
         break;
       }
     }
-    if (next.steps.some(step => step.status === "FAILED")) break;
+    if (conditionFailed) break;
   }
   return changed ? next : undefined;
 }
