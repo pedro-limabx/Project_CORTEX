@@ -1,6 +1,8 @@
 import { readStepOutput } from "./bindings.js";
 import {
   readyWorkflowSteps,
+  recoveryAuthorized,
+  failedStepHandler,
   WorkflowInputError,
   type WorkflowCondition,
   type WorkflowRun,
@@ -46,11 +48,14 @@ export function evaluateWorkflowBranches(
   current: WorkflowRun,
   timestamp: string = new Date().toISOString()
 ): WorkflowRun | undefined {
-  // An unresolved or failed external action takes precedence over all branch
-  // decisions. Reconciliation or an operator review must happen first.
-  if (current.steps.some(step => step.status === "FAILED" || step.status === "RUNNING")) {
-    return undefined;
-  }
+  // Never interpret an ambiguous effect as a confirmed failure. Also
+  // wait for the operator to attest each eligible failure before resolving
+  // paths that are no longer reachable.
+  if (current.steps.some(step => step.status === "RUNNING")) return undefined;
+  const failures = current.steps.filter(step => step.status === "FAILED");
+  if (failures.some(step =>
+    !failedStepHandler(current, step.id) || !recoveryAuthorized(current, step.id)
+  )) return undefined;
   const next = structuredClone(current);
   let changed = false;
   let again = true;
@@ -80,7 +85,17 @@ export function evaluateWorkflowBranches(
         break;
       }
       const mode = step.dependsMode ?? "all";
-      if (mode === "all" && parents.some(parent => parent?.status === "SKIPPED")) {
+      const failedParents = parents.filter(parent => parent?.status === "FAILED");
+      if (failedParents.length) {
+        if (!step.onFailureOf ||
+            failedParents.length !== 1 ||
+            failedParents[0]?.id !== step.onFailureOf) {
+          skip(step, "A required dependency failed");
+          continue;
+        }
+      }
+      if (parents.some(parent => parent?.status === "SKIPPED") &&
+          (mode === "all" || step.onFailureOf)) {
         skip(step, "A required dependency was skipped");
         continue;
       }
