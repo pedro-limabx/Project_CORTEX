@@ -20,6 +20,9 @@ const statusLabels = {
   WAITING_APPROVAL: "Aguardando aprovação",
   REPLANNING: "Replanejando",
   NEEDS_RECONCILIATION: "Verificação necessária",
+  RECOVERY_REQUIRED: "Recuperação exige confirmação",
+  RECOVERING: "Recuperação supervisionada",
+  COMPLETED_WITH_FAILURES: "Concluído com recuperação",
   COMPLETED: "Concluído",
   FAILED: "Falhou",
   PENDING: "Pendente",
@@ -281,8 +284,9 @@ function renderChatInspection(result) {
         const box = node("div", "workflow-step");
         const top = node("div", "workflow-step-top");
         top.append(node("strong", "", item.objective), statusPill(item.status));
-        box.append(top, node("p", "", item.completed + " executadas · "
-          + (item.skipped || 0) + " ignoradas · " + item.percent + "% resolvido"));
+        box.append(top, node("p", "", item.completed + " concluídas · "
+          + (item.skipped || 0) + " ignoradas · "
+          + (item.failed || 0) + " falhas · " + item.percent + "% resolvido"));
         box.append(node("p", "", item.attention));
         box.append(node("p", "row-meta", "ID: " + item.id));
         target.append(box);
@@ -377,6 +381,26 @@ const presets = {
       }
     ]
   },
+  recovery: {
+    objective: "Demonstrar falha comprovada e recuperação supervisionada",
+    steps: [
+      { id: "original", tool: "calculator.evaluate", input: { expression: "10/0" } },
+      {
+        id: "bloqueada", tool: "calculator.evaluate",
+        input: { expression: "10+20" }, dependsOn: ["original"]
+      },
+      {
+        id: "alternativa", tool: "calculator.evaluate",
+        input: { expression: "10+5" },
+        dependsOn: ["original"], onFailureOf: "original"
+      },
+      {
+        id: "conclusao", tool: "calculator.evaluate",
+        input: { expression: "{{steps.alternativa.result}}*2" },
+        dependsOn: ["alternativa"]
+      }
+    ]
+  },
   invalid: {
     objective: "Testar validação de dependências cíclicas",
     steps: [
@@ -426,8 +450,9 @@ function renderWorkflowList() {
     const top = node("div", "row-head");
     top.append(node("strong", "", workflow.objective), statusPill(workflow.status));
     button.append(top, node("div", "row-meta",
-      dateTime(workflow.updatedAt) + " · " + workflow.progress.completed + " executadas"
+      dateTime(workflow.updatedAt) + " · " + workflow.progress.completed + " concluídas"
       + (workflow.progress.skipped ? " · " + workflow.progress.skipped + " ignoradas" : "")
+      + (workflow.progress.failed ? " · " + workflow.progress.failed + " falhas" : "")
       + " · " + workflow.progress.percent + "% resolvido"));
     button.addEventListener("click", () => action(async () => {
       state.workflowId = workflow.id;
@@ -444,6 +469,9 @@ function stepView(step) {
   item.append(top);
   if (step.dependsOn && step.dependsOn.length) item.append(node("p", "", "Depende de: " + step.dependsOn.join(", ")));
   if (step.dependsMode === "settled") item.append(node("p", "", "Juntada: aguarda os caminhos terminarem ou serem ignorados."));
+  if (step.onFailureOf) {
+    item.append(node("p", "", "Recuperação supervisionada para falha da etapa: " + step.onFailureOf));
+  }
   if (step.when) {
     const operators = { eq: "=", neq: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤" };
     item.append(node("p", "", "Condição: " + step.when.step + "." + step.when.path
@@ -476,18 +504,60 @@ function renderWorkflowDetail(workflow) {
   bar.value = workflow.progress.percent;
   bar.setAttribute("aria-label", "Progresso do workflow");
   target.append(bar, node("div", "progress-caption",
-    workflow.progress.completed + " executadas · "
+    workflow.progress.completed + " concluídas · "
     + (workflow.progress.skipped || 0) + " ignoradas · "
+    + (workflow.progress.failed || 0) + " falhas · "
     + workflow.progress.percent + "% resolvido"));
   target.append(node("p", "row-meta", "ID: " + workflow.id));
+  if (workflow.recoveries?.length) {
+    target.append(headline("Autorizações de recuperação (sem execução)"));
+    workflow.recoveries.forEach(record => {
+      target.append(node("p", "inspect-info",
+        record.stepId + " · " + dateTime(record.authorizedAt) + " · " + record.note));
+    });
+  }
 
   const buttons = node("div", "actions");
-  if (workflow.status === "ACTIVE") {
+  if (workflow.status === "ACTIVE" || workflow.status === "RECOVERING") {
     buttons.append(makeButton("▶ Avançar etapa", "btn-primary", async () => {
       renderWorkflowDetail(await api("/api/workflows/" + encodeURIComponent(workflow.id) + "/advance", { method: "POST", body: {} }));
       await loadWorkflows();
       showNotice("A solicitação de avanço foi processada.", "success");
     }));
+  }
+  if (workflow.status === "RECOVERY_REQUIRED") {
+    const failed = workflow.steps.find(step => step.status === "FAILED"
+      && workflow.steps.some(handler => handler.onFailureOf === step.id)
+      && !workflow.recoveries?.some(entry => entry.stepId === step.id));
+    if (failed) {
+      const handler = workflow.steps.find(step => step.onFailureOf === failed.id);
+      buttons.append(node("p", "hint",
+        "A etapa " + failed.id + " falhou. Investigue o resultado externo antes de autorizar "
+        + "o caminho " + handler.id + ". Nenhuma ação será repetida automaticamente."));
+      buttons.append(makeButton("Confirmar investigação e autorizar recuperação", "btn-outline",
+        async () => {
+          if (!window.confirm("Você investigou a falha de " + failed.id
+            + ", verificou possíveis efeitos externos e autoriza SOMENTE preparar "
+            + "a etapa alternativa " + handler.id + "? Ela não será executada agora.")) return;
+          const note = window.prompt(
+            "Descreva o que foi verificado (mínimo 10 caracteres). Não inclua senhas nem dados sensíveis:"
+          );
+          if (note === null) return;
+          if (note.trim().length < 10 || note.length > 500) {
+            throw new Error("Informe uma justificativa de 10 a 500 caracteres.");
+          }
+          renderWorkflowDetail(await api(
+            "/api/workflows/" + encodeURIComponent(workflow.id) + "/recovery",
+            { method: "POST", body: { stepId: failed.id, confirmed: true, note } }
+          ));
+          await loadWorkflows();
+          showNotice(
+            "Recuperação autorizada, sem executar nenhuma ferramenta. "
+            + "Revise o caminho alternativo e use Avançar etapa quando decidir.",
+            "success"
+          );
+        }));
+    }
   }
   if (workflow.status === "AWAITING_APPROVAL") {
     const step = workflow.steps.find(s => s.status === "WAITING_APPROVAL");
