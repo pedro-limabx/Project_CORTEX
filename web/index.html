@@ -86,11 +86,12 @@
             <select id="preset">
               <option value="chain">Encadeamento real: resultado do 1º cálculo → 2º cálculo</option>
               <option value="fork">Cálculos independentes + dependência conjunta</option>
+              <option value="conditional">Decisão condicional: desconto e caminhos alternativos</option>
               <option value="invalid">Grafo inválido (para testar validação)</option>
             </select>
             <label class="field-label" for="workflow-json">Definição JSON</label>
             <textarea id="workflow-json" class="code-editor" spellcheck="false" rows="17"></textarea>
-            <p class="hint">As saídas das etapas podem alimentar outras etapas. Ex.: <code>{{steps.primeiro.result}}/3</code> ou <code>{"$fromStep":"primeiro","path":"result"}</code>. Declare o passo anterior em <code>dependsOn</code>. Os tipos são validados antes da execução.</p>
+            <p class="hint">Para transmitir resultados, use <code>{{steps.primeiro.result}}/3</code> e declare <code>dependsOn</code>. Para escolher caminhos, adicione <code>when</code> com a etapa de origem, caminho, operador e valor. Etapas cuja condição é falsa são ignoradas; <code>dependsMode: "settled"</code> espera os caminhos alternativos terminarem.</p>
             <div class="actions"><button id="create-workflow" type="button" class="btn btn-primary">+ Criar workflow</button><button id="reset-example" type="button" class="btn btn-ghost">Restaurar</button></div>
           </article>
           <div class="stack">
