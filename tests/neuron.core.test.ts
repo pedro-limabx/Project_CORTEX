@@ -290,35 +290,61 @@ describe("NEURON adaptive planner", () => {
 
 
 describe("NEURON persisted task resume", () => {
-  it("resumes a persisted task using the saved objective and task id", async () => {
+  it("resumes an incomplete persisted task using the saved objective and task id", async () => {
     const registry = new ToolRegistry();
+    registry.register({
+      name: "test.fail",
+      version: "1.0.0",
+      description: "Fails once so the task can be persisted for resume.",
+      risk: "LOW",
+      permissions: [],
+      inputSchema: { parse: (value: unknown) => value },
+      async execute() {
+        throw new Error("simulated failure");
+      }
+    });
     registry.register(calculatorTool);
 
     let calls = 0;
     const provider: LLMProvider = {
       async chat(messages: LLMMessage[]): Promise<LLMResponse> {
         calls++;
+
         if (calls === 1) {
           return {
             provider: "test",
             text: "",
             toolCalls: [{
-              id: "calc-1",
-              name: "calculator.evaluate",
-              arguments: JSON.stringify({ expression: "10+5" })
+              id: "fail-1",
+              name: "test.fail",
+              arguments: "{}"
             }]
           };
         }
 
-        expect(messages.some(message =>
-          message.role === "user" && message.content?.includes("Planner signal")
-        )).toBe(false);
+        if (calls === 2) {
+          expect(messages.some(message =>
+            message.role === "user" && message.content?.includes("Planner signal")
+          )).toBe(true);
 
-        const lastTool = messages[messages.length - 1];
-        expect(lastTool?.role).toBe("tool");
+          return {
+            provider: "test",
+            text: "A tarefa precisa ser retomada."
+          };
+        }
+
+        expect(messages.some(message =>
+          message.role === "user" && message.content?.includes("Calcule 10 + 5.")
+        )).toBe(true);
+
         return {
           provider: "test",
-          text: "Tarefa concluída."
+          text: "",
+          toolCalls: [{
+            id: "calc-1",
+            name: "calculator.evaluate",
+            arguments: JSON.stringify({ expression: "10+5" })
+          }]
         };
       }
     };
@@ -334,7 +360,7 @@ describe("NEURON persisted task resume", () => {
     );
 
     const first = await core.respond("test-user", "Calcule 10 + 5.");
-    expect(first.plan.status).toBe("COMPLETED");
+    expect(first.plan.status).toBe("REPLANNING");
 
     const savedTask = await memory.getTask("test-user", "task:" + first.requestId + ":1");
     expect(savedTask).toBeDefined();
@@ -344,14 +370,18 @@ describe("NEURON persisted task resume", () => {
     });
 
     expect(resumed.plan.objective).toBe("Calcule 10 + 5.");
-    expect(resumed.plan.status).toBe("COMPLETED");
-    expect(resumed.plan.steps).toHaveLength(1);
+    expect(resumed.plan.status).toBe("REPLANNING");
+    expect(resumed.plan.steps).toHaveLength(2);
     expect(resumed.plan.steps[0]).toMatchObject({
       index: 1,
+      tool: "test.fail",
+      status: "FAILED"
+    });
+    expect(resumed.plan.steps[1]).toMatchObject({
+      index: 2,
       tool: "calculator.evaluate",
       status: "COMPLETED"
     });
-    expect(resumed.text).toBe("Tarefa concluída.");
   });
 
   it("rejects an unknown task id", async () => {
