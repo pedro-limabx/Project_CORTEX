@@ -23,6 +23,13 @@ suite("CORTEX V10 PostgreSQL integration", () => {
     const separate = new PostgresMonitorRepository(pool!);
     expect((await separate.getSettings(user)).intervalSeconds).toBe(60);
     expect((await separate.getSettings(other)).enabled).toBe(false);
+    // Changing the frequency must reschedule an already-enabled monitor.
+    await pool!.query(
+      "UPDATE cortex_monitor_settings SET next_check_at = now() + interval '1 hour' WHERE user_id=$1",
+      [user]
+    );
+    const accelerated = await separate.configure(user,true,60,600);
+    expect(Date.parse(accelerated.nextCheckAt)).toBeLessThanOrEqual(Date.now()+5000);
     const ev = await separate.events(user,10);
     expect(ev[0]?.kind).toBe("SETTINGS_UPDATED");
     expect(await separate.events(other,10)).toHaveLength(0);

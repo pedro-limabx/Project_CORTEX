@@ -70,7 +70,7 @@ export class PostgresMonitorRepository implements MonitorRepository {
     await this.ensure(user);
     const updated = await this.pool.query<SettingRow>([
       "UPDATE cortex_monitor_settings SET enabled=$2, interval_seconds=$3, cooldown_seconds=$4,",
-      "next_check_at=CASE WHEN $2 AND NOT enabled THEN now() ELSE next_check_at END",
+      "next_check_at=CASE WHEN $2 AND (NOT enabled OR interval_seconds<>$3) THEN now() ELSE next_check_at END",
       "WHERE user_id=$1 RETURNING enabled,interval_seconds,cooldown_seconds,next_check_at,last_checked_at,last_check_ok"
     ].join(" "), [user, enabled, intervalSeconds, cooldownSeconds]);
     await this.event(user, "SETTINGS_UPDATED", 0, 0, new Date().toISOString());
