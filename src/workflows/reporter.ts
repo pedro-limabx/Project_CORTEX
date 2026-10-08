@@ -105,8 +105,9 @@ export class WorkflowReporter {
     if (id !== undefined && !UUID.test(id)) {
       throw new Error("Invalid workflow id");
     }
+    const selected = id ? await this.store.get(userId, id) : undefined;
     const runs = id
-      ? (await this.store.get(userId, id) ? [await this.store.get(userId, id)] : [])
+      ? selected ? [selected] : []
       : await this.store.list(userId, limit);
     const items = runs.filter((run): run is WorkflowRun => Boolean(run)).map(run => reportItem(run, this.now()));
     const mode = id ? "single" : "recent";
