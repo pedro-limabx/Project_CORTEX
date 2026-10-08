@@ -487,3 +487,87 @@ Esta entrega não adiciona paralelismo real, laços, execução automática,
 retentativas externas nem subfluxos transacionais. Condições são
 determinísticas e avaliadas exclusivamente sobre saídas de etapas do mesmo
 workflow.
+
+
+### CORTEX v5 — Recuperação supervisionada de falhas
+
+O v5 introduz caminhos alternativos explícitos para **falhas confirmadas**.
+Uma etapa normal pode falhar; uma etapa alternativa cadastrada com
+`onFailureOf` fica bloqueada até o operador investigar e autorizar a
+recuperação. **Nenhuma ferramenta é reexecutada ou disparada no momento
+da autorização.** O operador ainda precisa avançar cada etapa separadamente.
+
+Abra **/console → Workflows v2 → Modelo inicial → Recuperação supervisionada**
+para carregar um exemplo determinístico. Ele falha ao avaliar `10/0`,
+bloqueia a continuação normal, oferece a alternativa `10+5` e termina
+usando a saída desse caminho alternativo.
+
+Definição resumida:
+
+```json
+{
+  "objective": "Recuperar uma etapa sem repetir efeitos externos",
+  "steps": [
+    { "id": "principal", "tool": "calculator.evaluate",
+      "input": { "expression": "10/0" } },
+    { "id": "alternativa", "tool": "calculator.evaluate",
+      "input": { "expression": "10+5" },
+      "dependsOn": ["principal"], "onFailureOf": "principal" }
+  ]
+}
+```
+
+**Fluxo supervisionado:**
+
+1. O operador cria o workflow e clica **Avançar etapa**.
+2. Se a etapa principal falhar, o workflow entra em `RECOVERY_REQUIRED`.
+3. O operador investiga o que realmente ocorreu e confirma pelo console
+   a recuperação, incluindo uma justificativa de 10 a 500 caracteres.
+   Para integrações externas, confirme principalmente que não houve
+   efeitos colaterais relevantes antes de usar o caminho alternativo.
+4. O CORTEX salva a autorização e libera o handler, entrando em `RECOVERING`.
+   As etapas normais bloqueadas pela falha ficam `SKIPPED`.
+5. **Avançar etapa** executa no máximo uma ferramenta do caminho liberado.
+   Caso seja de alto risco, a aprovação específica da ferramenta continua
+   obrigatória, adicionalmente à autorização de recuperação.
+6. Quando as etapas restantes terminarem, o estado passa a
+   `COMPLETED_WITH_FAILURES`: a falha histórica é preservada, mas o
+   caminho alternativo alcançou o final.
+
+Endpoint autenticado, sem execução no mesmo pedido:
+
+```http
+POST /api/workflows/UUID/recovery
+Content-Type: application/json
+
+{
+  "stepId": "principal",
+  "confirmed": true,
+  "note": "Conferi a falha e os efeitos no serviço de origem."
+}
+```
+
+**Proteções:**
+
+- `onFailureOf` exige uma etapa existente em `dependsOn`, com apenas
+  **um handler por falha** e sem encadeamento de handlers de recuperação.
+- A alternativa não pode ler outputs de sua etapa falha, nem usar condições
+  `when` ou junções `dependsMode: "settled"`.
+- A autorização depende de um passo efetivamente `FAILED`, é vinculada
+  ao usuário da execução e usa CAS para evitar duplicidade em concorrência.
+- Caso a etapa original termine normalmente, o handler e seus descendentes
+  que dependem dele são descartados (`SKIPPED`), sem ferramentas extras.
+- Falhas com `Tool timeout` são **ambíguas**, pois o serviço externo pode
+  continuar a operação após o timeout. Elas permanecem como `RUNNING`
+  (`NEEDS_RECONCILIATION`), sem habilitar recuperação, até o operador
+  verificar externamente e reconciliar a etapa.
+- Erros retornados por serviços externos também podem ter produzido efeitos
+  parciais. A autorização não prova automaticamente que um efeito não ocorreu.
+  Nunca habilite recuperação financeira ou física sem confirmação externa
+  e mecanismos de idempotência e compensação apropriados.
+- `progress.failed` preserva o total de passos falhos, enquanto
+  `progress.completed` conta execuções bem-sucedidas e `progress.skipped`
+  conta caminhos descartados. O percentual representa etapas
+  **resolvidas**, não percentual de sucesso.
+- A recuperação é supervisionada; não foram adicionadas novas retentativas
+  automáticas, processos em segundo plano nem transações exatamente uma vez.
