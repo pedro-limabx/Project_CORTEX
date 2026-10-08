@@ -41,7 +41,7 @@ function harness(provider: LLMProvider, localDemo = false) {
 
 describe("NEURON natural-language workflow drafting", () => {
   it("produces a schema-validated draft without saving or executing it", async () => {
-    const chat = vi.fn(async () => ({
+    const chat = vi.fn(async (..._args: Parameters<LLMProvider["chat"]>) => ({
       provider: "mock",
       text: JSON.stringify({
         objective: "Calcule 25 vezes 18",
