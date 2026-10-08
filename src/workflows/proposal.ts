@@ -69,12 +69,28 @@ export class WorkflowProposalService {
       if (response.toolCalls?.length) {
         throw new WorkflowProposalError("The model attempted tool execution instead of drafting");
       }
+      if (response.provider === "unconfigured") {
+        throw new WorkflowProposalError(
+          "Provedor de IA não configurado. Configure LLM_API_KEY e LLM_MODEL ou use LOCAL_TEST_MODE=true."
+        );
+      }
       const text = response.text.trim();
       if (!text || text.length > 16000) {
         throw new WorkflowProposalError("The model returned an empty or oversized workflow draft");
       }
+      // Some models surround otherwise valid JSON with a single markdown fence.
+      // Unwrap only an entire fenced block; do not heuristically extract arbitrary text.
+      const fence = String.fromCharCode(96).repeat(3);
+      let json = text;
+      if (json.startsWith(fence)) {
+        const newline = json.indexOf("\n");
+        if (newline < 0 || !json.endsWith(fence)) {
+          throw new WorkflowProposalError("The model did not return a valid JSON workflow");
+        }
+        json = json.slice(newline + 1, -fence.length).trim();
+      }
       try {
-        raw = JSON.parse(text) as unknown;
+        raw = JSON.parse(json) as unknown;
       } catch {
         throw new WorkflowProposalError("The model did not return a valid JSON workflow");
       }
