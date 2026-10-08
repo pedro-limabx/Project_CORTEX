@@ -13,6 +13,7 @@ export interface WorkflowReportItem {
   status: ReturnType<typeof workflowStatus>;
   completed: number;
   skipped: number;
+  failed: number;
   total: number;
   percent: number;
   nextStepIds: string[];
@@ -44,8 +45,24 @@ function reportItem(run: WorkflowRun, now: number): WorkflowReportItem {
     attention = Number.isFinite(age) && age >= 0 && age < IN_FLIGHT_GRACE_MS
       ? "Uma etapa está em execução; aguarde o resultado antes de qualquer reconciliação."
       : "Há uma etapa com resultado incerto. Verifique externamente antes de reconciliar; não repita automaticamente.";
+  } else if (status === "RECOVERY_REQUIRED") {
+    const source = run.steps.find(step => step.status === "FAILED"
+      && !run.recoveries?.some(authorization => authorization.stepId === step.id));
+    attention = source
+      ? "Falha confirmada em " + source.id
+        + ". Verifique efeitos externos e registre autorização humana antes da recuperação."
+      : "Uma falha exige autorização explícita para o caminho alternativo.";
+  } else if (status === "RECOVERING") {
+    const handler = run.steps.find(step => step.onFailureOf
+      && step.status !== "COMPLETED" && step.status !== "SKIPPED");
+    attention = handler
+      ? "Recuperação autorizada. Etapa alternativa: " + handler.id
+        + ". Avance manualmente; aprovações de ferramentas continuam obrigatórias."
+      : "Recuperação em andamento; prossiga somente com comandos explícitos.";
+  } else if (status === "COMPLETED_WITH_FAILURES") {
+    attention = "Fluxo concluído por caminho alternativo, preservando o registro da falha original.";
   } else if (status === "FAILED") {
-    attention = "O fluxo falhou; exige análise antes de qualquer novo plano.";
+    attention = "O fluxo falhou sem recuperação concluída; exige análise manual.";
   } else if (status === "COMPLETED") {
     attention = snapshot.progress.skipped > 0
       ? "Fluxo finalizado: " + snapshot.progress.completed + " etapas executadas e "
@@ -64,6 +81,7 @@ function reportItem(run: WorkflowRun, now: number): WorkflowReportItem {
     status,
     completed: snapshot.progress.completed,
     skipped: snapshot.progress.skipped,
+    failed: snapshot.progress.failed,
     total: snapshot.progress.total,
     percent: snapshot.progress.percent,
     nextStepIds: snapshot.progress.ready,
@@ -76,6 +94,9 @@ const statusText: Record<WorkflowReportItem["status"], string> = {
   ACTIVE: "ativo",
   AWAITING_APPROVAL: "aguardando aprovação",
   NEEDS_RECONCILIATION: "execução em curso ou resultado incerto",
+  RECOVERY_REQUIRED: "aguarda autorização de recuperação",
+  RECOVERING: "recuperação supervisionada",
+  COMPLETED_WITH_FAILURES: "concluído por recuperação",
   COMPLETED: "concluído",
   FAILED: "falhou"
 };
@@ -83,7 +104,7 @@ const statusText: Record<WorkflowReportItem["status"], string> = {
 function formatItem(item: WorkflowReportItem): string {
   return [
     `• ${item.objective} (ID: ${item.id})`,
-    `  Situação: ${statusText[item.status]}; ${item.completed} executadas, ${item.skipped} ignoradas de ${item.total} etapas (${item.percent}% resolvido).`,
+    `  Situação: ${statusText[item.status]}; ${item.completed} concluídas, ${item.skipped} ignoradas e ${item.failed} com falha de ${item.total} etapas (${item.percent}% resolvido).`,
     `  ${item.attention}`
   ].join("\n");
 }
@@ -136,7 +157,10 @@ export class WorkflowReporter {
       const approvals = items.filter(item => item.status === "AWAITING_APPROVAL").length;
       const uncertain = items.filter(item => item.status === "NEEDS_RECONCILIATION").length;
       const failures = items.filter(item => item.status === "FAILED").length;
-      const done = items.filter(item => item.status === "COMPLETED").length;
+      const recoveryPending = items.filter(item => item.status === "RECOVERY_REQUIRED").length;
+      const recovering = items.filter(item => item.status === "RECOVERING").length;
+      const done = items.filter(item => item.status === "COMPLETED" ||
+        item.status === "COMPLETED_WITH_FAILURES").length;
       const countText = (n: number, singular: string, plural: string): string =>
         `${n} ${n === 1 ? singular : plural}`;
       const headline = [
@@ -144,7 +168,9 @@ export class WorkflowReporter {
         countText(active, "ativo", "ativos") + ",",
         countText(approvals, "aguardando aprovação", "aguardando aprovação") + ",",
         countText(uncertain, "com execução/resultado pendente", "com execução/resultado pendente") + ",",
-        countText(failures, "com falha", "com falha") + " e",
+        countText(failures, "com falha", "com falha") + ",",
+        countText(recoveryPending, "aguardando recuperação", "aguardando recuperação") + ",",
+        countText(recovering, "em recuperação", "em recuperação") + " e",
         countText(done, "concluído", "concluídos") + "."
       ].join(" ");
       text = [headline, ...items.map(formatItem)].join("\n\n");
