@@ -25,6 +25,14 @@ import { WorkflowEngine } from "./workflows/engine.js";
 import { WorkflowProposalService, WorkflowProposalError } from "./workflows/proposal.js";
 import { WorkflowReporter } from "./workflows/reporter.js";
 import { MonitoringService } from "./workflows/monitoring.js";
+import {
+  InMemoryAlertAcknowledgementStore,
+  PostgresAlertAcknowledgementStore,
+  type AlertAcknowledgementStore
+} from "./alerts/store.js";
+import {
+  OperationalAlertService, AlertInputError, AlertConflictError, AlertNotFoundError
+} from "./alerts/service.js";
 import { InMemoryWorkflowStore, PostgresWorkflowStore, type WorkflowStore } from "./workflows/store.js";
 import { WorkflowConflictError, WorkflowInputError, WorkflowNotFoundError } from "./workflows/types.js";
 
@@ -56,6 +64,7 @@ let permissions: PermissionEngine;
 let approvals: ApprovalEngine;
 let audit: AuditStore = new InMemoryAuditStore();
 let workflowStore: WorkflowStore;
+let alertAcknowledgements: AlertAcknowledgementStore;
 if (pool) {
   const postgresMemory = new PostgresMemoryStore(pool);
   await postgresMemory.initialize();
@@ -72,10 +81,14 @@ if (pool) {
   const postgresWorkflows = new PostgresWorkflowStore(pool);
   await postgresWorkflows.initialize();
   workflowStore = postgresWorkflows;
+  const postgresAlerts = new PostgresAlertAcknowledgementStore(pool);
+  await postgresAlerts.initialize();
+  alertAcknowledgements = postgresAlerts;
   app.log.info("Persistent PostgreSQL memory and audit enabled");
 } else {
   memory = new InMemoryStore();
   workflowStore = new InMemoryWorkflowStore();
+  alertAcknowledgements = new InMemoryAlertAcknowledgementStore();
   permissions = new PermissionEngine(new InMemoryPermissionStore());
   approvals = new ApprovalEngine(new InMemoryApprovalStore());
   app.log.warn("DATABASE_URL is not set; using in-memory memory, permissions and audit stores");
@@ -94,6 +107,7 @@ const llm = config.LOCAL_TEST_MODE
   : new OpenAICompatibleProvider(config.LLM_BASE_URL, config.LLM_API_KEY, config.LLM_MODEL);
 const workflowReporter = new WorkflowReporter(workflowStore);
 const monitoring = new MonitoringService(workflowStore);
+const operationalAlerts = new OperationalAlertService(workflowStore, alertAcknowledgements);
 const neuron = new NeuronCore(llm, memory, registry, executor, permissions, approvals, audit, workflowReporter);
 const workflows = new WorkflowEngine(workflowStore, registry, executor, permissions, approvals, audit);
 const workflowProposals = new WorkflowProposalService(llm, workflows, registry, config.LOCAL_TEST_MODE);
@@ -262,6 +276,39 @@ app.get("/api/workflows", { preHandler: authenticate }, async (request, reply) =
     return reply.code(400).send({ error: "limit must be an integer from 1 to 100" });
   }
   return { workflows: await workflows.list(config.CORTEX_USER_ID, limit) };
+});
+
+// v8 inbox: calculated on demand, no autonomous polling or external delivery.
+app.get("/api/alerts", { preHandler: authenticate }, async (request, reply) => {
+  const query = request.query as { limit?: unknown; view?: unknown };
+  const limit = query.limit === undefined ? 50 : Number(query.limit);
+  const view = query.view === undefined ? "all" : query.view;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100 ||
+      (view !== "all" && view !== "unread")) {
+    return reply.code(400).send({
+      error: "limit must be 1..100 and view must be all or unread"
+    });
+  }
+  return operationalAlerts.inbox(config.CORTEX_USER_ID, { limit, view });
+});
+
+// Operator confirms reading an EXACT workflow version/status. This does not
+// grant a tool permission, reconcile external effects or change the workflow.
+app.post("/api/alerts/acknowledge", { preHandler: authenticate }, async (request, reply) => {
+  try {
+    return await operationalAlerts.acknowledge(config.CORTEX_USER_ID, request.body);
+  } catch (error) {
+    if (error instanceof AlertInputError) {
+      return reply.code(400).send({ error: error.message });
+    }
+    if (error instanceof AlertNotFoundError) {
+      return reply.code(404).send({ error: error.message });
+    }
+    if (error instanceof AlertConflictError) {
+      return reply.code(409).send({ error: error.message });
+    }
+    throw error;
+  }
 });
 
 // Reporting is read-only and scoped to the server-controlled identity.

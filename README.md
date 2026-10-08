@@ -673,3 +673,90 @@ pelo botão global `Atualizar`. Não há sondagem recorrente em segundo plano,
 alertas por e-mail ou métricas históricas agregadas nesta etapa.
 
 **Validação:** `npm run typecheck && npm test && npm run build`.
+
+
+### CORTEX v8 — Alertas operacionais e reconhecimento supervisionado
+
+A nova aba **Alertas** em `/console` consulta a situação atual dos
+workflows e organiza situações que exigem intervenção humana, em ordem
+de prioridade:
+
+- **Críticos:** `NEEDS_RECONCILIATION` (efeito externo incerto) e
+  `FAILED` (falha confirmada sem recuperação concluída).
+- **Atenção:** `RECOVERY_REQUIRED`, `AWAITING_APPROVAL` e
+  `RECOVERING`.
+
+Cada consulta considera **somente os últimos 20, 50 ou 100 workflows**
+mais recentemente atualizados do usuário controlado pelo servidor. O
+painel permite alternar entre **Não vistos** e **Todos** e mostra quantos
+alertas estão ativos, quantos foram reconhecidos e quantos são críticos.
+Um workflow `COMPLETED` ou `ACTIVE` não gera alerta nesta v8.
+
+**Confirmação de leitura supervisionada:** o botão **Marcar como visto**
+exige confirmação explícita e registra a identidade do usuário do
+servidor, o ID do workflow, o estado exato, a versão e o horário de
+reconhecimento. Isso **não** aprova ferramentas, não reconciliará
+efeitos externos, não muda o estado do workflow nem resolve o problema.
+Quando o workflow avança para outra versão/estado, o reconhecimento
+antigo deixa de valer e o alerta volta a aparecer como não visto,
+caso ainda exista um estado que exija intervenção. Confirmações
+repetidas da mesma versão são idempotentes.
+
+**Preparação de aviso:** o botão **Copiar aviso (não envia)** monta um
+resumo operacional reduzido (identificador, estado, gravidade,
+diagnóstico determinístico e próxima ação). Ele não inclui
+o objetivo livre do usuário nem payloads, logs de erro detalhados,
+credenciais, resultados ou notas privadas. O operador revisa e decide
+se, onde e para quem compartilhar; o sistema **não envia** emails,
+notificações push, mensagens de aplicativos nem faz checagens periódicas
+em segundo plano.
+
+A API é autenticada com o mesmo token Bearer dos outros endpoints:
+
+```http
+GET /api/alerts?limit=50&view=unread
+GET /api/alerts?limit=100&view=all
+```
+
+A resposta contém `scope` (com `isAllTime: false`),
+`generatedAt`, `readOnly: true`, `delivery: "manual_in_app_only"`,
+`counts` e a lista de `alerts`. A contagem reflete todos os avisos
+detectados na amostra, mesmo quando o filtro oculta os já vistos.
+
+O reconhecimento exige uma versão atual e confirmação específica:
+
+```http
+POST /api/alerts/acknowledge
+Content-Type: application/json
+
+{
+  "workflowId": "UUID_DO_WORKFLOW",
+  "version": 3,
+  "status": "RECOVERY_REQUIRED",
+  "confirmed": true
+}
+```
+
+Uma requisição inválida retorna `400`; workflow de outro usuário ou
+inexistente retorna `404`; estado ou versão alterados retornam `409`
+sem registrar o reconhecimento. A resposta bem-sucedida inclui
+`acknowledgedAt`, `workflowUnchanged: true` e
+`actionExecuted: false`. A confirmação não altera a versão do
+workflow.
+
+**Persistência:** com `DATABASE_URL`, o CORTEX inicializa a tabela
+`cortex_alert_acknowledgements` com unicidade por
+`(user_id, workflow_id, workflow_version, workflow_status)` e consultas
+parametrizadas com isolamento de usuário. Sem banco, os reconhecimentos
+ficam em memória e se perdem quando o processo é reiniciado; o mesmo
+vale para os workflows criados sem `DATABASE_URL`. O registro confirma
+apenas que o aviso foi visto, não que a investigação esteja concluída.
+Não há retenção automática de reconhecimentos históricos nesta versão.
+
+A v8 não contém provedores externos, regras de envio agendado,
+supressão global de alertas nem controle de acesso por múltiplos
+operadores sob a mesma identidade do servidor. Não interprete o badge
+de alertas como notificação de tempo real: ele é atualizado quando
+o operador acessa o painel ou utiliza os botões de atualização.
+
+Para validar: `npm run typecheck && npm test && npm run build`.

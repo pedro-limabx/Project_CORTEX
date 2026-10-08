@@ -16,6 +16,7 @@
     <nav aria-label="Navegação">
       <button class="nav-button active" data-tab="overview">◈ <span>Visão geral</span></button>
       <button class="nav-button" data-tab="monitoring">▥ <span>Monitoramento</span></button>
+      <button class="nav-button" data-tab="alerts">◉ <span>Alertas</span> <span class="nav-alert-count" id="nav-alert-count" aria-label="Alertas não vistos" hidden></span></button>
       <button class="nav-button" data-tab="chat">✦ <span>NEURON Chat</span></button>
       <button class="nav-button" data-tab="workflows">⬡ <span>Workflows v2</span></button>
       <button class="nav-button" data-tab="tasks">▤ <span>Tarefas</span></button>
@@ -112,6 +113,50 @@
           <div class="card-head"><h2>Workflows recentes</h2><span class="overline">ABRIR DETALHES</span></div>
           <div id="monitor-recent" class="monitor-recent-grid"></div>
         </article>
+      </section>
+
+      <section class="panel" data-panel="alerts" hidden>
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">SUPERVISED OPERATIONS / CORTEX V8</div>
+            <h1>Central de <span>alertas.</span></h1>
+            <p>Identifique situações importantes, marque como vistas e prepare avisos sem enviar mensagens automaticamente.</p>
+          </div>
+          <button id="refresh-alerts" class="btn btn-outline" type="button">↻ Consultar alertas</button>
+        </div>
+        <article class="card monitoring-scope">
+          <div>
+            <strong>Avisos da amostra de workflows recentes</strong>
+            <p class="hint" id="alerts-scope">Aguardando consulta. Os alertas são calculados quando você atualiza esta página.</p>
+          </div>
+          <div class="alerts-controls">
+            <label class="field-label" for="alerts-limit">Workflows analisados
+              <select id="alerts-limit">
+                <option value="20">20</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+            <label class="field-label" for="alerts-view">Exibir
+              <select id="alerts-view">
+                <option value="unread" selected>Não vistos</option>
+                <option value="all">Todos</option>
+              </select>
+            </label>
+          </div>
+        </article>
+        <div class="metrics monitoring-metrics" aria-label="Resumo dos alertas da amostra">
+          <div class="metric"><small>AVISOS IDENTIFICADOS</small><strong id="alerts-total">—</strong><span>Na amostra selecionada</span></div>
+          <div class="metric"><small>NÃO VISTOS</small><strong id="alerts-unread">—</strong><span>Precisam ser examinados</span></div>
+          <div class="metric"><small>JÁ VISTOS</small><strong id="alerts-seen">—</strong><span>Confirmados nesta versão</span></div>
+          <div class="metric"><small>CRÍTICOS</small><strong id="alerts-critical">—</strong><span>Falha ou efeito externo incerto</span></div>
+        </div>
+        <article class="card">
+          <div class="card-head"><h2>Caixa de alertas</h2><span class="overline">TRIAGEM HUMANA</span></div>
+          <p class="hint">Marcar um alerta como visto não resolve o problema, não concede permissões e não executa ferramentas. Os avisos voltam a exigir atenção quando a versão do workflow muda.</p>
+          <div id="alerts-list" class="alerts-list" aria-live="polite"><div class="blank">Ainda não há alertas carregados.</div></div>
+        </article>
+        <div class="tip">As notificações da v8 permanecem dentro do CORTEX. O sistema não envia e-mails ou mensagens externas e não executa verificações em segundo plano.</div>
       </section>
 
       <section class="panel" data-panel="chat" hidden>

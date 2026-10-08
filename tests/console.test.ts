@@ -25,6 +25,12 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain('id="propose-workflow"');
     expect(index.body).toContain('id="chat-workflow-status"');
     expect(index.body).toContain('data-tab="monitoring"');
+    expect(index.body).toContain('data-tab="alerts"');
+    expect(index.body).toContain('id="nav-alert-count"');
+    expect(index.body).toContain('id="alerts-list"');
+    expect(index.body).toContain('id="alerts-view"');
+    expect(index.body).toContain('id="alerts-limit"');
+    expect(index.body).toContain('id="refresh-alerts"');
     expect(index.body).toContain('id="monitor-scope"');
     expect(index.body).toContain('id="monitor-limit"');
     expect(index.body).toContain('id="monitor-status-distribution"');
@@ -57,6 +63,12 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain("Entrada resolvida utilizada:");
     expect(script.body).toContain('function askWorkflowStatus(id)');
     expect(script.body).toContain('api("/api/monitoring/overview?limit="');
+    expect(script.body).toContain('"/api/alerts?limit="');
+    expect(script.body).toContain('api("/api/alerts/acknowledge"');
+    expect(script.body).toContain("function renderAlerts(snapshot)");
+    expect(script.body).toContain("alertMessageForManualShare(alert)");
+    expect(script.body).toContain('confirmed: true');
+    expect(script.body).toContain('Copiar aviso (não envia)');
     expect(script.body).toContain("function renderMonitoring(snapshot)");
     expect(script.body).toContain("monitorStatuses.forEach(status =>");
     expect(script.body).toContain("monitorStepStatuses.forEach(status =>");
@@ -68,6 +80,8 @@ describe("CORTEX web console", () => {
     expect(stylesheet.statusCode).toBe(200);
     expect(stylesheet.headers["content-type"]).toContain("text/css");
     expect(stylesheet.body).toContain(".monitor-bar-track");
+    expect(stylesheet.body).toContain(".operational-alert.critical");
+    expect(stylesheet.body).toContain(".nav-alert-count[hidden]");
     expect(stylesheet.body).toContain(".monitor-alert.critical");
     expect(stylesheet.body).toContain(".monitor-recent-grid");
 
@@ -228,6 +242,29 @@ describe("CORTEX web console", () => {
     expect(input.focus).toHaveBeenCalledOnce();
     expect(sendChatMessage).toHaveBeenCalledOnce();
     expect(showNotice).toHaveBeenCalledWith(expect.stringContaining("rascunho"));
+  });
+
+  it("prepares a privacy-safe manual alert without including user objectives or secrets", async () => {
+    const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
+    const start = source.indexOf("function alertMessageForManualShare(alert) {");
+    const finish = source.indexOf("function renderAlerts(snapshot) {", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(finish).toBeGreaterThan(start);
+    const preview = runInNewContext(
+      source.slice(start, finish) +
+      '\nalertMessageForManualShare({ workflowId: "a1", status: "FAILED",' +
+      ' severity: "critical", objective: "DO_NOT_SHARE_OBJECTIVE",' +
+      ' message: "Falha controlada", nextAction: "Investigar efeito externo",' +
+      ' input: "DO_NOT_SHARE_INPUT", output: "DO_NOT_SHARE_OUTPUT" })',
+      { statusLabels: { FAILED: "Falhou" } }
+    ) as string;
+    expect(preview).toContain("a1");
+    expect(preview).toContain("Falhou");
+    expect(preview).toContain("Investigar efeito externo");
+    expect(preview).not.toContain("DO_NOT_SHARE_OBJECTIVE");
+    expect(preview).not.toContain("DO_NOT_SHARE_INPUT");
+    expect(preview).not.toContain("DO_NOT_SHARE_OUTPUT");
+    expect(preview).toContain("preparado manualmente");
   });
 
   it("ships parseable JavaScript without embedding server secrets or local URL assumptions", async () => {

@@ -11,6 +11,9 @@ const state = {
   lastChat: null,
   monitoring: null,
   monitorLimit: 50,
+  alerts: null,
+  alertsLimit: 50,
+  alertsView: "unread",
   busy: false
 };
 
@@ -122,7 +125,7 @@ async function action(operation, button = null) {
 }
 function tab(name) {
   const labels = {
-    overview: "Visão geral", monitoring: "Monitoramento", chat: "NEURON Chat",
+    overview: "Visão geral", monitoring: "Monitoramento", alerts: "Alertas", chat: "NEURON Chat",
     workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
   };
   if (!labels[name]) return;
@@ -131,6 +134,7 @@ function tab(name) {
   $("#page-name").textContent = labels[name];
   hideNotice();
   if (name === "monitoring") action(loadMonitoring);
+  if (name === "alerts") action(loadAlerts);
   if (name === "workflows") action(loadWorkflows);
   if (name === "tasks") action(loadTasks);
   if (name === "tools") action(loadTools);
@@ -191,9 +195,17 @@ async function loadMonitoring() {
   renderMonitoring(result);
 }
 
+async function loadAlerts() {
+  const path = "/api/alerts?limit=" + state.alertsLimit
+    + "&view=" + encodeURIComponent(state.alertsView);
+  const result = await api(path);
+  state.alerts = result;
+  renderAlerts(result);
+}
+
 async function refreshAll() {
   await checkHealth();
-  const results = await Promise.allSettled([loadTools(), loadWorkflows(), loadTasks(), loadMonitoring()]);
+  const results = await Promise.allSettled([loadTools(), loadWorkflows(), loadTasks(), loadMonitoring(), loadAlerts()]);
   const rejected = results.find(result => result.status === "rejected");
   if (rejected) throw rejected.reason;
 }
@@ -340,6 +352,99 @@ $("#refresh-monitoring").addEventListener("click",
 $("#monitor-limit").addEventListener("change", event => {
   state.monitorLimit = Number(event.currentTarget.value);
   void action(loadMonitoring);
+});
+
+// CORTEX v8 — explicit, on-demand, owner-scoped alert triage.
+function alertMessageForManualShare(alert) {
+  // Deliberately exclude the user-authored objective and all stored payloads.
+  // The operator chooses whether and where to send this text; CORTEX never sends.
+  return [
+    "CORTEX — Alerta operacional (preparado manualmente)",
+    "Workflow: " + alert.workflowId,
+    "Estado: " + (statusLabels[alert.status] || alert.status),
+    "Classificação: " + (alert.severity === "critical" ? "Crítico" : "Atenção"),
+    "Situação: " + alert.message,
+    "Próxima ação sugerida: " + alert.nextAction,
+    "Este aviso não comprova conclusão ou execução de ferramentas."
+  ].join("\n");
+}
+
+function renderAlerts(snapshot) {
+  $("#alerts-scope").textContent = "Consultado em " + dateTime(snapshot.generatedAt)
+    + " · " + snapshot.scope.sampled + " workflows dentre os últimos "
+    + snapshot.scope.limit + " examinados. Recorte recente, não histórico total.";
+  $("#alerts-total").textContent = String(snapshot.counts.all);
+  $("#alerts-unread").textContent = String(snapshot.counts.unread);
+  $("#alerts-seen").textContent = String(snapshot.counts.acknowledged);
+  $("#alerts-critical").textContent = String(snapshot.counts.critical);
+  const badge = $("#nav-alert-count");
+  badge.textContent = String(snapshot.counts.unread);
+  badge.hidden = snapshot.counts.unread === 0;
+
+  const target = clear($("#alerts-list"));
+  if (!snapshot.alerts.length) {
+    target.append(info(snapshot.counts.all === 0
+      ? "Nenhum alerta foi identificado na amostra consultada."
+      : "Não há alertas não vistos para os workflows consultados."));
+    return;
+  }
+  snapshot.alerts.forEach(alert => {
+    const entry = node("article", "operational-alert " + alert.severity
+      + (alert.acknowledged ? " acknowledged" : ""));
+    const header = node("div", "row-head");
+    header.append(node("strong", "", alert.objective), statusPill(alert.status));
+    entry.append(header);
+    entry.append(node("p", "row-meta",
+      (alert.severity === "critical" ? "Prioridade crítica" : "Requer atenção")
+      + " · Versão " + alert.version + " · " + dateTime(alert.updatedAt)));
+    entry.append(node("p", "", alert.message));
+    entry.append(node("p", "hint", "Próxima ação: " + alert.nextAction));
+    if (alert.acknowledged) {
+      entry.append(node("p", "alert-acknowledged",
+        "✓ Visto em " + dateTime(alert.acknowledgedAt)
+        + " — o problema pode continuar pendente."));
+    }
+    const actions = node("div", "actions");
+    actions.append(makeButton("Examinar workflow ↗", "btn-ghost small",
+      () => openMonitoredWorkflow(alert.workflowId)));
+    if (!alert.acknowledged) {
+      actions.append(makeButton("✓ Marcar como visto", "btn-outline small", async () => {
+        if (!window.confirm("Confirma que leu este alerta? Isso NÃO resolve a falha, "
+          + "não aprova ferramentas nem altera o workflow.")) return;
+        await api("/api/alerts/acknowledge", {
+          method: "POST",
+          body: {
+            workflowId: alert.workflowId,
+            version: alert.version,
+            status: alert.status,
+            confirmed: true
+          }
+        });
+        await loadAlerts();
+        showNotice("Leitura registrada. A operação do workflow não foi alterada.", "success");
+      }));
+    }
+    actions.append(makeButton("Copiar aviso (não envia)", "btn-ghost small", async () => {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Seu navegador não permite copiar neste contexto seguro.");
+      }
+      await navigator.clipboard.writeText(alertMessageForManualShare(alert));
+      showNotice("Aviso copiado. Nenhum e-mail ou mensagem foi enviado.", "success");
+    }));
+    entry.append(actions);
+    target.append(entry);
+  });
+}
+
+$("#refresh-alerts").addEventListener("click",
+  event => action(loadAlerts, event.currentTarget));
+$("#alerts-limit").addEventListener("change", event => {
+  state.alertsLimit = Number(event.currentTarget.value);
+  void action(loadAlerts);
+});
+$("#alerts-view").addEventListener("change", event => {
+  state.alertsView = event.currentTarget.value;
+  void action(loadAlerts);
 });
 
 // NEURON Chat
