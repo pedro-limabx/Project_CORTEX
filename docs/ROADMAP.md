@@ -12,3 +12,5 @@
 10. Additional integrations.
 
 Every phase follows: analyze → implement → test → security review → document → validate.
+
+CORTEX V12: lembretes pessoais únicos persistidos, triagem dos vencidos no backend, confirmação/cancelamento manual e painel dedicado. Integração com o chat e recorrência permanecem evoluções futuras.

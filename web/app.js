@@ -31,6 +31,9 @@ const statusLabels = {
   COMPLETED: "Concluído",
   FAILED: "Falhou",
   PENDING: "Pendente",
+  DUE: "Vencido",
+  DONE: "Concluído",
+  CANCELLED: "Cancelado",
   SKIPPED: "Ignorada",
   RUNNING: "Executando",
   PLANNED: "Planejado"
@@ -125,7 +128,7 @@ async function action(operation, button = null) {
 }
 function tab(name) {
   const labels = {
-    overview: "Visão geral", monitoring: "Monitoramento", alerts: "Alertas", chat: "NEURON Chat",
+    overview: "Visão geral", monitoring: "Monitoramento", alerts: "Alertas", reminders: "Lembretes", chat: "NEURON Chat",
     workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
   };
   if (!labels[name]) return;
@@ -135,6 +138,7 @@ function tab(name) {
   hideNotice();
   if (name === "monitoring") action(loadMonitoring);
   if (name === "alerts") action(loadAlertCenter);
+  if (name === "reminders") action(loadReminders);
   if (name === "workflows") action(loadWorkflows);
   if (name === "tasks") action(loadTasks);
   if (name === "tools") action(loadTools);
@@ -695,6 +699,66 @@ $("#backend-monitor-check").addEventListener("click", event => action(async () =
 $("#backend-notice-refresh").addEventListener("click", event =>
   action(loadBackendCenter, event.currentTarget));
 $("#backend-notice-view").addEventListener("change", () => void action(loadBackendCenter));
+
+// CORTEX V12: explicitly scheduled one-time reminders, no browser timer required.
+async function loadReminders() {
+  const view = $("#reminder-view").value;
+  const response = await api("/api/reminders?view=" + encodeURIComponent(view) + "&limit=100");
+  const target = clear($("#reminder-list"));
+  $("#reminder-due-count").textContent = String(response.due) + " vencido(s)";
+  $("#reminder-status").textContent = "Avisos somente no painel · " +
+    response.reminders.length + " lembrete(s) nesta seleção.";
+  if (!response.reminders.length) {
+    target.append(info("Nenhum lembrete nesta seleção."));
+    return;
+  }
+  for (const reminder of response.reminders) {
+    const item = node("article","reminder-item" + (reminder.status === "DUE" ? " reminder-due" : ""));
+    const header = node("div","row-head");
+    header.append(node("strong","",reminder.title),statusPill(reminder.status));
+    item.append(header,node("p","row-meta","Agendado para " + dateTime(reminder.dueAt)));
+    if (reminder.triggeredAt) item.append(node("p","hint","Venceu em " + dateTime(reminder.triggeredAt)));
+    if (reminder.completedAt) item.append(node("p","hint","Concluído em " + dateTime(reminder.completedAt)));
+    const buttons = node("div","actions");
+    if (reminder.status === "PENDING" || reminder.status === "DUE") {
+      buttons.append(makeButton("✓ Concluir","btn-outline small",async () => {
+        if (!window.confirm("Marcar este lembrete como concluído?")) return;
+        await api("/api/reminders/" + encodeURIComponent(reminder.id) + "/complete",{
+          method:"POST",body:{confirmed:true}
+        });
+        await loadReminders();
+        showNotice("Lembrete concluído.","success");
+      }));
+      buttons.append(makeButton("Cancelar","btn-ghost small",async () => {
+        if (!window.confirm("Cancelar este lembrete?")) return;
+        await api("/api/reminders/" + encodeURIComponent(reminder.id) + "/cancel",{
+          method:"POST",body:{confirmed:true}
+        });
+        await loadReminders();
+        showNotice("Lembrete cancelado.","success");
+      }));
+    }
+    item.append(buttons);
+    target.append(item);
+  }
+}
+$("#reminder-form").addEventListener("submit",event => {
+  event.preventDefault();
+  void action(async () => {
+    const localValue = $("#reminder-due").value;
+    const millis = new Date(localValue).getTime();
+    if (!localValue || !Number.isFinite(millis)) throw new Error("Informe data e hora válidas.");
+    await api("/api/reminders",{method:"POST",body:{
+      title:$("#reminder-title").value.trim(),dueAt:new Date(millis).toISOString()
+    }});
+    $("#reminder-title").value = "";
+    $("#reminder-due").value = "";
+    await loadReminders();
+    showNotice("Lembrete agendado e salvo no PostgreSQL.","success");
+  },$("#reminder-form button[type=submit]"));
+});
+$("#refresh-reminders").addEventListener("click",event => action(loadReminders,event.currentTarget));
+$("#reminder-view").addEventListener("change",() => void action(loadReminders));
 
 // NEURON Chat
 function addMessage(who, value, fromUser = false) {

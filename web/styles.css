@@ -273,3 +273,14 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 /* V11: operational health next to a read-only manual scan action. */
 .backend-health-row { display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:12px }
 .backend-health-row p { margin:0;flex:1;min-width:210px }
+
+/* V12: simple personal reminder agenda. All text is inserted with textContent. */
+.reminder-list { display:grid;gap:11px;margin-top:20px;max-height:550px;overflow-y:auto }
+.reminder-item { border:1px solid var(--border);border-radius:12px;background:#111e2b;padding:15px;overflow-wrap:anywhere }
+.reminder-item .row-head { align-items:start;flex-wrap:wrap }
+.reminder-item .row-head strong { font-size:13px;white-space:normal;overflow:visible }
+.reminder-item .actions { margin-top:10px }
+.reminder-due { border-left:3px solid var(--yellow);background:#242219 }
+.status.due { color:#ffdd9c;border-color:#7b613c;background:#3d3022 }
+.status.done { color:#80e3b9;border-color:#245e4c;background:#143a31 }
+.status.cancelled { color:#a5adba;border-color:#495365;background:#29303b }

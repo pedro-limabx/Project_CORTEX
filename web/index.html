@@ -17,6 +17,7 @@
       <button class="nav-button active" data-tab="overview">◈ <span>Visão geral</span></button>
       <button class="nav-button" data-tab="monitoring">▥ <span>Monitoramento</span></button>
       <button class="nav-button" data-tab="alerts">◉ <span>Alertas</span> <span class="nav-alert-count" id="nav-alert-count" aria-label="Alertas não vistos" hidden></span></button>
+       <button class="nav-button" data-tab="reminders">◷ <span>Lembretes</span></button>
       <button class="nav-button" data-tab="chat">✦ <span>NEURON Chat</span></button>
       <button class="nav-button" data-tab="workflows">⬡ <span>Workflows v2</span></button>
       <button class="nav-button" data-tab="tasks">▤ <span>Tarefas</span></button>
@@ -215,6 +216,45 @@
           <div id="alerts-list" class="alerts-list" aria-live="polite"><div class="blank">Ainda não há alertas carregados.</div></div>
         </article>
         <div class="tip">O acompanhamento da V9 continua opcional nesta aba. O serviço V10 é independente do navegador, mas não continua durante a suspensão do Codespaces. Não há envio automático de e-mails, WhatsApp ou Telegram.</div>
+      </section>
+
+      <section class="panel" data-panel="reminders" hidden>
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">PERSONAL ASSISTANCE / CORTEX V12</div>
+            <h1>Seus <span>lembretes.</span></h1>
+            <p>Agende um aviso pessoal. O servidor identifica vencimentos e mantém os lembretes disponíveis no painel.</p>
+          </div>
+          <button id="refresh-reminders" type="button" class="btn btn-outline">↻ Atualizar lembretes</button>
+        </div>
+        <div class="columns">
+          <article class="card">
+            <div class="card-head"><h2>Novo lembrete</h2><span class="overline">POSTGRESQL</span></div>
+            <form id="reminder-form">
+              <label class="field-label" for="reminder-title">O que você quer lembrar?</label>
+              <input id="reminder-title" type="text" maxlength="160" required placeholder="Ex.: Revisar o planejamento de amanhã">
+              <label class="field-label" for="reminder-due">Quando?</label>
+              <input id="reminder-due" type="datetime-local" required>
+              <p class="hint">Use a hora local do dispositivo. Aceita agendamentos entre 1 minuto e 2 anos no futuro.</p>
+              <div class="actions"><button type="submit" class="btn btn-primary">+ Criar lembrete</button></div>
+            </form>
+            <div class="tip">Notificações apenas nesta interface. Não há e-mail, WhatsApp, SMS ou push. Sem servidor Node.js/PostgreSQL ativo, a identificação do vencimento fica suspensa até o retorno.</div>
+          </article>
+          <article class="card">
+            <div class="card-head"><h2>Agenda persistente</h2><span id="reminder-due-count" class="notification-counter">—</span></div>
+            <label class="field-label" for="reminder-view">Mostrar
+              <select id="reminder-view">
+                <option value="all">Todos</option>
+                <option value="due">Vencidos</option>
+                <option value="pending">Agendados</option>
+                <option value="done">Concluídos</option>
+                <option value="cancelled">Cancelados</option>
+              </select>
+            </label>
+            <p id="reminder-status" class="hint" role="status" aria-live="polite">Aguardando consulta ao servidor...</p>
+            <div id="reminder-list" class="reminder-list" aria-live="polite"></div>
+          </article>
+        </div>
       </section>
 
       <section class="panel" data-panel="chat" hidden>
