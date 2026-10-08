@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { MemoryRecord } from "../domain/types.js";
+import type { ExecutionPlan } from "./planner.js";
 
 const stepSchema = z.object({
   index: z.number().int().positive(),
@@ -27,12 +28,24 @@ const planSchema = z.object({
   }
 });
 
-export type StoredExecutionPlan = z.infer<typeof planSchema>;
-
-export function parseTaskPlan(content: string): StoredExecutionPlan {
+export function parseTaskPlan(content: string): ExecutionPlan {
   try {
     const value: unknown = JSON.parse(content);
-    return planSchema.parse(value);
+    const plan = planSchema.parse(value);
+    return {
+      objective: plan.objective,
+      status: plan.status,
+      revision: plan.revision,
+      ...(plan.currentStep !== undefined ? { currentStep: plan.currentStep } : {}),
+      steps: plan.steps.map(step => ({
+        index: step.index,
+        tool: step.tool,
+        input: step.input,
+        status: step.status,
+        ...(step.error !== undefined ? { error: step.error } : {}),
+        ...(step.approvalId !== undefined ? { approvalId: step.approvalId } : {})
+      }))
+    };
   } catch {
     throw new Error("Persisted task is invalid");
   }
