@@ -27,6 +27,14 @@ function harness() {
     }
   });
   registry.register({
+    name: "test.text", version: "1", description: "Return a string",
+    risk: "LOW", permissions: [],
+    inputSchema: z.object({ value: z.string() }),
+    async execute(input) {
+      return { result: (input as { value: string }).value };
+    }
+  });
+  registry.register({
     name: "test.secure", version: "1", description: "Controlled action",
     risk: "HIGH", permissions: [],
     inputSchema: z.object({ value: z.number() }),
@@ -178,6 +186,37 @@ describe("CORTEX v4 supervised conditional paths", () => {
     expect(failed.steps[1]?.status).toBe("FAILED");
     expect(failed.steps[1]?.error).toContain("Referenced output path is missing");
     expect(executions.map(item => item.value)).toEqual([4]);
+  });
+
+  it("compares strings strictly and fails closed on numeric type mismatch", async () => {
+    const { engine, executions } = harness();
+    const textMatch = await engine.create("a", {
+      objective: "Choose a path from a string",
+      steps: [
+        { id: "text", tool: "test.text", input: { value: "approved" } },
+        { id: "branch", tool: "test.value", input: { value: 12 },
+          dependsOn: ["text"],
+          when: { step: "text", path: "result", operator: "eq", value: "approved" } }
+      ]
+    });
+    const first = await engine.advance("a", textMatch.id);
+    expect(first.progress.ready).toEqual(["branch"]);
+    expect((await engine.advance("a", textMatch.id)).status).toBe("COMPLETED");
+    expect(executions.map(x => x.value)).toEqual([12]);
+
+    const mismatch = await engine.create("a", {
+      objective: "Never coerce strings into numbers",
+      steps: [
+        { id: "text", tool: "test.text", input: { value: "42" } },
+        { id: "guarded", tool: "test.value", input: { value: 20 },
+          dependsOn: ["text"],
+          when: { step: "text", path: "result", operator: "gt", value: 40 } }
+      ]
+    });
+    const blocked = await engine.advance("a", mismatch.id);
+    expect(blocked.status).toBe("FAILED");
+    expect(blocked.steps[1]?.error).toContain("non-numeric value");
+    expect(executions.map(x => x.value)).toEqual([12]);
   });
 
   it("does not create approvals or execute a sensitive step when its condition is false", async () => {
