@@ -11,6 +11,7 @@ function startCortexSplash() {
 
   document.querySelectorAll("[data-cortex-logo]").forEach(image => {
     image.addEventListener("error", () => { image.hidden = true; });
+    if (image.complete && image.naturalWidth === 0) image.hidden = true;
   });
 
   let finished = false;
@@ -40,8 +41,12 @@ function startCortexSplash() {
   document.body.classList.add("cortex-opening");
   watchdog = window.setTimeout(finish, 15_000);
   video.muted = true; // Required for reliable autoplay on modern browsers.
-  const playing = video.play();
-  if (playing && typeof playing.catch === "function") playing.catch(showFallback);
+  try {
+    const playing = video.play();
+    if (playing && typeof playing.catch === "function") playing.catch(showFallback);
+  } catch {
+    showFallback();
+  }
 }
 startCortexSplash();
 
