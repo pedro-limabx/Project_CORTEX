@@ -32,3 +32,5 @@ V19: consultas explícitas ao Google Agenda no NEURON Chat, com distinção de o
 V20: visão unificada sob demanda de lembretes CORTEX e eventos Google autorizados no NEURON Chat e API, com identificação das fontes, combinação conservadora de títulos/instantes e fallback local quando o Google não está conectado.
 
 V21: análise conservadora somente leitura dos conflitos entre eventos Google com duração e lembretes pontuais do CORTEX; avisos de dados ausentes e horários tentativos para avaliação humana, sem reagendamento automático.
+
+V22: propostas persistentes de reorganização de agenda com escolha explícita do compromisso, geração no backend, preservação de duração, expiração e aprovação/rejeição atômicas. Aprovação não modifica compromissos externos ou internos.
