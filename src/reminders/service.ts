@@ -36,11 +36,16 @@ export class ReminderScheduler {
     private readonly repository: Pick<ReminderRepository, "markDue">,
     private readonly user: string,
     private readonly now: () => Date = () => new Date(),
-    private readonly onError: (error: unknown) => void = () => {}
+    private readonly onError: (error: unknown) => void = () => {},
+    private readonly recurrence?: {generateDue(user:string,at:string,limit?:number):Promise<number>}
   ) {}
   async checkDue(): Promise<number> {
     if (this.inFlight) return this.inFlight;
-    const promise = this.repository.markDue(this.user, this.now().toISOString(), 100);
+    const promise = (async()=>{
+      const at=this.now().toISOString();
+      await this.recurrence?.generateDue(this.user,at,100);
+      return this.repository.markDue(this.user,at,100);
+    })();
     this.inFlight = promise;
     try { return await promise; }
     finally { if (this.inFlight === promise) this.inFlight = undefined; }

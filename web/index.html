@@ -241,7 +241,7 @@
       <section class="panel" data-panel="reminders" hidden>
         <div class="page-heading">
           <div>
-            <div class="eyebrow">PERSONAL ASSISTANCE / CORTEX V12</div>
+            <div class="eyebrow">PERSONAL ASSISTANCE / CORTEX V15</div>
             <h1>Seus <span>lembretes.</span></h1>
             <p>Agende um aviso pessoal. O servidor identifica vencimentos e mantém os lembretes disponíveis no painel.</p>
           </div>
@@ -280,6 +280,32 @@
             <div id="reminder-list" class="reminder-list" aria-live="polite"></div>
           </article>
         </div>
+        <article class="card recurrence-card">
+          <div class="card-head"><h2>Recorrências diárias e semanais</h2><span class="overline">CORTEX V15 · SÃO PAULO</span></div>
+          <p class="hint">Crie lembretes que se repetem no mesmo horário local. Pausar e retomar afeta apenas as próximas ocorrências; os avisos já criados continuam no histórico.</p>
+          <form id="recurrence-form" class="recurrence-form">
+            <label class="field-label" for="recurrence-title">Assunto
+              <input type="text" maxlength="160" id="recurrence-title" placeholder="Ex.: Verificar meus compromissos" required>
+            </label>
+            <label class="field-label" for="recurrence-frequency">Frequência
+              <select id="recurrence-frequency"><option value="DAILY">Todos os dias</option><option value="WEEKLY">Semanal</option></select>
+            </label>
+            <label class="field-label" for="recurrence-time">Horário de São Paulo
+              <input type="time" id="recurrence-time" required value="07:00">
+            </label>
+            <label class="field-label" for="recurrence-weekday" id="recurrence-weekday-wrap" hidden>Dia da semana
+              <select id="recurrence-weekday">
+                <option value="0">Domingo</option><option value="1">Segunda-feira</option>
+                <option value="2">Terça-feira</option><option value="3">Quarta-feira</option>
+                <option value="4">Quinta-feira</option><option value="5">Sexta-feira</option>
+                <option value="6">Sábado</option>
+              </select>
+            </label>
+            <button type="submit" class="btn btn-primary">+ Criar recorrência</button>
+          </form>
+          <p id="recurrence-status" class="hint" role="status" aria-live="polite">Nenhuma consulta realizada.</p>
+          <div id="recurrence-list" class="recurrence-list"></div>
+        </article>
       </section>
 
       <section class="panel" data-panel="chat" hidden>
