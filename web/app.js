@@ -86,6 +86,8 @@ const statusLabels = {
   DUE: "Vencido",
   DONE: "Concluído",
   CANCELLED: "Cancelado",
+  PAUSED: "Pausado",
+  ACTIVE: "Ativo",
   SKIPPED: "Ignorada",
   RUNNING: "Executando",
   PLANNED: "Planejado"
@@ -867,6 +869,65 @@ $("#reminder-browser-toggle").addEventListener("click",event=>action(async()=>{
 },event.currentTarget));
 updateReminderWatchControls();
 
+// CORTEX V15: recurring schedules in the same owner-scoped Postgres instance.
+const weekdayLabels=["Domingo","Segunda-feira","Terça-feira","Quarta-feira",
+  "Quinta-feira","Sexta-feira","Sábado"];
+async function loadRecurringSchedules(){
+  const snapshot=await api("/api/reminder-schedules?limit=100");
+  const list=clear($("#recurrence-list"));
+  $("#recurrence-status").textContent=snapshot.schedules.length+
+    " recorrência(s) · Horários em São Paulo · Sem geração de tarefas externas.";
+  if(!snapshot.schedules.length){
+    list.append(info("Você ainda não criou nenhuma recorrência."));
+    return;
+  }
+  for(const item of snapshot.schedules){
+    const entry=node("article","recurrence-item");
+    const head=node("div","row-head");
+    head.append(node("strong","",item.title),statusPill(item.status));
+    entry.append(head,node("p","row-meta",
+      (item.frequency==="DAILY"?"Todos os dias":weekdayLabels[item.weekday]??"Semanal")
+      +" às "+item.localTime+" · São Paulo"));
+    if(item.status==="ACTIVE")entry.append(node("p","hint",
+      "Próxima ocorrência: "+dateTime(item.nextDueAt)));
+    if(item.status==="PAUSED")entry.append(node("p","hint",
+      "Pausado · A próxima ocorrência será recalculada ao retomar."));
+    if(item.status==="CANCELLED")entry.append(node("p","hint","Cancelado definitivamente."));
+    const actions=node("div","actions");
+    for(const [label,actionName] of item.status==="ACTIVE"
+      ?[["Pausar","pause"],["Cancelar","cancel"]]
+      :item.status==="PAUSED"
+        ?[["Retomar","resume"],["Cancelar","cancel"]]:[]){
+      actions.append(makeButton(label,"btn-outline small",async()=>{
+        if(!window.confirm("Confirma "+label.toLowerCase()+" esta recorrência? "+
+          "As ocorrências anteriores permanecerão no histórico."))return;
+        await api("/api/reminder-schedules/"+encodeURIComponent(item.id)+
+          "/"+actionName,{method:"POST",body:{confirmed:true}});
+        await loadReminders();
+        showNotice("Recorrência atualizada.","success");
+      }));
+    }
+    entry.append(actions);
+    list.append(entry);
+  }
+}
+$("#recurrence-frequency").addEventListener("change",()=>{
+  $("#recurrence-weekday-wrap").hidden=$("#recurrence-frequency").value!=="WEEKLY";
+});
+$("#recurrence-form").addEventListener("submit",event=>{
+  event.preventDefault();
+  void action(async()=>{
+    const frequency=$("#recurrence-frequency").value;
+    const body={title:$("#recurrence-title").value.trim(),
+      frequency,time:$("#recurrence-time").value,
+      ...(frequency==="WEEKLY"?{weekday:Number($("#recurrence-weekday").value)}:{})};
+    await api("/api/reminder-schedules",{method:"POST",body});
+    $("#recurrence-title").value="";
+    await loadReminders();
+    showNotice("Recorrência criada no PostgreSQL.","success");
+  },$("#recurrence-form button[type=submit]"));
+});
+
 // CORTEX V12: explicitly scheduled one-time reminders, no browser timer required.
 async function loadReminders() {
   const view = $("#reminder-view").value;
@@ -876,6 +937,7 @@ async function loadReminders() {
   updateReminderBadge(response.due);
   $("#reminder-status").textContent = "Avisos somente no painel · " +
     response.reminders.length + " lembrete(s) nesta seleção.";
+  await loadRecurringSchedules();
   if (!response.reminders.length) {
     target.append(info("Nenhum lembrete nesta seleção."));
     return;
@@ -997,6 +1059,36 @@ $("#chat-form").addEventListener("submit", (event) => {
 });
 function renderChatInspection(result) {
   const target = clear($("#chat-inspect"));
+  if(result?.recurringProposal){
+    const schedule=result.recurringProposal;
+    target.append(headline("Prévia de lembrete recorrente"));
+    textDetail(target,"Assunto",schedule.title);
+    textDetail(target,"Frequência",schedule.frequency==="DAILY"?"Diariamente":
+      "Semanalmente, "+(weekdayLabels[schedule.weekday]??"—"));
+    textDetail(target,"Horário",schedule.time+" · São Paulo (SP)");
+    textDetail(target,"Primeira ocorrência",dateTime(schedule.nextDueAt));
+    target.append(node("p","hint","Ainda não foi salvo. É necessária uma confirmação."));
+    target.append(makeButton("✓ Confirmar recorrência","btn-primary",async()=>{
+      if(state.lastChat!==result){
+        showNotice("Esta prévia não é mais a mensagem selecionada. Envie o comando novamente.");
+        return;
+      }
+      const created=await api("/api/reminder-schedules",{method:"POST",body:{
+        title:schedule.title,frequency:schedule.frequency,time:schedule.time,
+        ...(schedule.frequency==="WEEKLY"?{weekday:schedule.weekday}:{})
+      }});
+      state.lastChat=null;
+      target.append(node("p","hint","Recorrência salva: "+created.schedule.id));
+      target.querySelectorAll("button").forEach(button=>{button.disabled=true;});
+      showNotice("Recorrência confirmada e salva no PostgreSQL.","success");
+      try{await loadRecurringSchedules();}catch{/* successful write, optional UI refresh */}
+    }));
+    return;
+  }
+  if(result?.recurringGuidance){
+    target.append(info("Não foi possível interpretar a recorrência. Nada foi agendado."));
+    return;
+  }
   if (result?.reminderProposal) {
     const reminder = result.reminderProposal;
     const meta = node("div","detail-meta");

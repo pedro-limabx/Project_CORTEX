@@ -293,6 +293,19 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 .reminder-watch-controls .btn { white-space:normal }
 @media (max-width:650px) { .reminder-watch-controls { flex-direction:column;align-items:stretch } }
 
+.recurrence-card { margin-top:20px }
+.recurrence-form { display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:16px 0 }
+.recurrence-form .field-label { flex:1;min-width:180px }
+.recurrence-form input,.recurrence-form select { margin-top:7px }
+.recurrence-form #recurrence-weekday-wrap[hidden] { display:none!important }
+.recurrence-list { display:grid;gap:9px;margin-top:12px }
+.recurrence-item { border:1px solid var(--border);border-radius:12px;padding:13px;background:#111e2b;overflow-wrap:anywhere }
+.recurrence-item .row-head { display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap }
+.recurrence-item .actions { margin-top:8px }
+.status.active { color:#80e3b9;border-color:#245e4c;background:#143a31 }
+.status.paused { color:#ffdd9c;border-color:#7b613c;background:#3d3022 }
+@media(max-width:650px){.recurrence-form{display:grid}.recurrence-form .field-label{min-width:0}}
+
 /* CORTEX brand / opening film. Uses only fixed local media URLs. */
 .brand { gap:11px;padding-left:7px;padding-right:7px }
 .brand-icon { position:relative;display:grid;place-items:center;flex:none;width:54px;height:54px;overflow:hidden;border:none;background:transparent;border-radius:0;box-shadow:none }

@@ -33,6 +33,7 @@ import { ReminderScheduler, ReminderInputError, validateNewReminder } from "./re
 import { interpretReminder } from "./reminders/interpret.js";
 import { PostgresRecurrenceRepository } from "./reminders/recurrence-store.js";
 import { validateNewSchedule } from "./reminders/recurrence.js";
+import { interpretRecurringReminder } from "./reminders/recurrence-interpret.js";
 import {
   InMemoryAlertAcknowledgementStore,
   PostgresAlertAcknowledgementStore,
@@ -637,6 +638,22 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
   // Limited deterministic command support. This only prepares a reminder;
   // it NEVER writes to PostgreSQL without the explicit UI confirmation.
   // Every other chat command continues through the existing NEURON pipeline.
+  const recurringDraft=interpretRecurringReminder(body.message.trim());
+  if(recurringDraft){
+    if(!recurrenceStore)return reply.code(503).send({error:"PostgreSQL is required for recurring reminders"});
+    if(recurringDraft.kind==="help")return {
+      requestId:crypto.randomUUID(),mode:"recurrence-help",text:recurringDraft.message,
+      recurringGuidance:true,created:false
+    };
+    return {
+      requestId:crypto.randomUUID(),mode:"recurrence-preview",
+      text:"Preparei a recorrência. Confira frequência, horário e assunto antes de confirmar.",
+      recurringProposal:{title:recurringDraft.title,frequency:recurringDraft.frequency,
+        weekday:recurringDraft.weekday,time:recurringDraft.time,
+        timeZone:recurringDraft.timeZone,nextDueAt:recurringDraft.nextDueAt,
+        requiresConfirmation:true},created:false,dryRun:body.dryRun===true
+    };
+  }
   const reminderDraft = interpretReminder(body.message.trim());
   if (reminderDraft) {
     if (!reminderStore) {
