@@ -39,3 +39,24 @@ As chamadas são somente para endpoints HTTPS fixos do Google. O Google pode lim
 ## Testes
 
 \`npm run typecheck && npm test && npm run build\` verifica unidades e integração PostgreSQL com respostas Google simuladas. Não há testes de ponta a ponta com conta Google real sem suas credenciais e consentimento. Não cole segredos nesta conversa.
+
+
+## V19 — Consultas de eventos Google no NEURON Chat
+
+A V19 usa a conexão OAuth opcional da V18 para responder no chat a perguntas explícitas, por exemplo:
+
+- `Quais reuniões tenho amanhã?`
+- `NEURON, quais reuniões tenho hoje?`
+- `Quais eventos tenho no Google Agenda hoje?`
+- `Mostre meus eventos do Google nos próximos 7 dias`
+- `O que tenho no Google Agenda amanhã?`
+
+Há um botão **Google amanhã** no NEURON Chat. O clique coloca a pergunta no mesmo fluxo de mensagens, sem sobrescrever rascunhos. Comandos são reconhecidos por padrões determinísticos e limitados a **hoje, amanhã e próximos 7 dias (incluindo hoje)**, em horário civil de São Paulo. Não há interpretação geral por IA nem consulta automática sem uma pergunta enviada por você.
+
+Se o Google não estiver configurado ou autorizado, o chat mostra uma orientação e um atalho para a aba Google Agenda, sem fingir que existe uma conexão. Para períodos não reconhecidos, como “sexta-feira que vem”, o NEURON solicita reformulação em vez de inventar resultados. Erros de conexão ou autorização são comunicados claramente.
+
+A resposta tem `mode=google-calendar-readonly` e `googleAgenda: {source:"google-calendar",readOnly:true,events,truncated,...}`. É uma consulta real ao calendário **principal** do Google, usando exclusivamente o escopo de leitura da V18. Ela não altera eventos no Google, não cria lembretes no CORTEX e não usa o conteúdo de eventos como comandos para ferramentas, workflows ou LLMs. Renovação de token OAuth pode atualizar apenas as credenciais criptografadas locais. Informações do Google aparecem identificadas separadamente dos lembretes do banco interno.
+
+São retornados no máximo 50 eventos por consulta, com indicador de paginação quando o Google informar mais resultados; a resposta em texto resume no máximo 10. Perguntas sobre **reuniões** consultam todos os eventos do período, pois o Google não distingue automaticamente reuniões de outros compromissos pela estrutura da agenda. A V19 não sincroniza ou unifica permanentemente os dois calendários e não envia eventos para outras integrações.
+
+**Pré-requisito:** concluir a configuração OAuth da V18 e conectar sua conta pelo painel. Testes automatizados usam um provedor simulado; uma conta Google real só será acessada com sua autorização.

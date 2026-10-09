@@ -26,3 +26,5 @@ V16: consulta da agenda pelo NEURON Chat e API autenticada, com janelas locais d
 V17: exportação autenticada da agenda em iCalendar (.ics) para importação manual em outros aplicativos, com privacidade, escapes RFC 5545 e rejeição de resultados parciais.
 
 V18: conexão opcional Google Agenda com OAuth 2.0/PKCE, permissões somente leitura, credenciais criptografadas no PostgreSQL e consulta supervisionada. Sem escrita em calendários, sincronização ou autorização automática.
+
+V19: consultas explícitas ao Google Agenda no NEURON Chat, com distinção de origem, limites de paginação e orientação quando a integração OAuth não está ativa; preserva escopo somente leitura.

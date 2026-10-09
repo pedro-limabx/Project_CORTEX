@@ -66,6 +66,10 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain('if(result?.recurringProposal)');
     expect(script.body).toContain('if(result?.agenda)');
     expect(index.body).toContain('id="chat-agenda-today"');
+    expect(index.body).toContain('id="chat-google-tomorrow"');
+    expect(script.body).toContain('if(result?.googleAgenda)');
+    expect(script.body).toContain('if(result?.googleCalendarHelp)');
+    expect(script.body).toContain('Google Agenda · somente leitura');
     expect(index.body).toContain('id="export-calendar"');
     expect(index.body).toContain('id="agenda-export-period"');
     expect(script.body).toContain('async function downloadAgendaIcs(period)');
@@ -248,7 +252,7 @@ describe("CORTEX web console", () => {
   it("uses the agenda quick action only on click and preserves chat drafts", async () => {
     const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
     const start = source.indexOf('$("#chat-agenda-today").addEventListener("click"');
-    const end = source.indexOf("// Quick status questions", start);
+    const end = source.indexOf("// V19 quick Google query", start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const input = {value:"",focus:vi.fn()};
@@ -270,6 +274,33 @@ describe("CORTEX web console", () => {
     expect(input.value).toBe("rascunho não enviado");
     expect(input.focus).toHaveBeenCalledOnce();
     expect(sendChatMessage).toHaveBeenCalledOnce();
+    expect(showNotice).toHaveBeenCalledWith(expect.stringContaining("rascunho"));
+  });
+
+  it("V19 Google quick action does not overwrite drafts or send without a click",async()=>{
+    const source=await readFile(resolve(process.cwd(),"web/app.js"),"utf8");
+    const start=source.indexOf('$("#chat-google-tomorrow").addEventListener("click"');
+    const end=source.indexOf("// Quick status questions",start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const input={value:"",focus:vi.fn()}, tab=vi.fn(),sendChatMessage=vi.fn(),
+      showNotice=vi.fn();
+    let clickHandler:(()=>void)|undefined;
+    const button={addEventListener:(_name:string,callback:()=>void)=>{clickHandler=callback;}};
+    runInNewContext(source.slice(start,end),{
+      $:(selector:string)=>selector==="#message"?input:button,
+      tab,sendChatMessage,showNotice,chatSending:false
+    });
+    expect(sendChatMessage).not.toHaveBeenCalled();
+    clickHandler?.();
+    expect(tab).toHaveBeenCalledWith("chat");
+    expect(input.value).toBe("Quais reuniões tenho amanhã?");
+    expect(sendChatMessage).toHaveBeenCalledTimes(1);
+    input.value="Não quero perder este texto";
+    clickHandler?.();
+    expect(input.value).toBe("Não quero perder este texto");
+    expect(input.focus).toHaveBeenCalledTimes(1);
+    expect(sendChatMessage).toHaveBeenCalledTimes(1);
     expect(showNotice).toHaveBeenCalledWith(expect.stringContaining("rascunho"));
   });
 
