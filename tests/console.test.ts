@@ -67,6 +67,9 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain('if(result?.agenda)');
     expect(index.body).toContain('id="chat-agenda-today"');
     expect(index.body).toContain('id="chat-google-tomorrow"');
+    expect(index.body).toContain('id="chat-unified-today"');
+    expect(script.body).toContain('if(result?.unifiedAgenda)');
+    expect(script.body).toContain('Agenda unificada · somente leitura');
     expect(script.body).toContain('if(result?.googleAgenda)');
     expect(script.body).toContain('if(result?.googleCalendarHelp)');
     expect(script.body).toContain('Google Agenda · somente leitura');
