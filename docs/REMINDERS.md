@@ -1,4 +1,4 @@
-# CORTEX V12 — Lembretes pessoais persistentes
+# CORTEX — Lembretes pessoais persistentes (V12–V15)
 
 A V12 introduz **lembretes únicos**, não recorrentes, separados das tarefas de workflow e dos alertas operacionais da V8–V11.
 
@@ -57,3 +57,14 @@ A contagem de lembretes `DUE` aparece na navegação e atualiza ao abrir a aba o
 Proteções: monitoramento e avisos são **desativados por padrão e não persistem entre recarregamentos**; a seleção de IDs é mantida na memória da aba para suprimir duplicações; avisos mais antigos não são disparados em massa; uma única notificação genérica representa vários vencimentos detectados no mesmo ciclo. A consulta retorna no máximo 100 registros vencidos — não é varredura histórica ilimitada.
 
 **Limitações:** não existe Service Worker, Web Push, push móvel, background sync, SMS, e-mail ou entrega quando a aba está fechada. Em segundo plano, navegadores podem limitar a frequência dos timers. O PostgreSQL e o processo Node precisam estar ativos para a atualização dos estados; o servidor não garante entrega ao sistema operacional. O sistema não executa ferramentas ou outras ações ao disparar esses avisos.
+
+## V15 — Recorrências diárias e semanais
+
+- Na aba Lembretes → Recorrências, escolha assunto, frequência DAILY ou WEEKLY, hora HH:MM de São Paulo e, para WEEKLY, dia da semana (0 domingo a 6 sábado).
+- POST /api/reminder-schedules aceita {"title":"Verificar agenda","frequency":"DAILY","time":"07:00"}; para semanal, use frequency WEEKLY e weekday entre 0 e 6.
+- GET /api/reminder-schedules?limit=50 consulta as regras; POST /api/reminder-schedules/:id/pause, /resume e /cancel exigem {"confirmed":true}.
+- O chat aceita comandos explícitos, como 'Lembre-me todos os dias às 7h de verificar meus compromissos' e 'Lembre-me toda segunda-feira às 9h de conferir a agenda'. Ele oferece uma prévia que precisa ser confirmada antes de gravar.
+
+O worker Node.js salva cada ocorrência na tabela cortex_reminders com transações e um índice único em schedule_id/due_at. FOR UPDATE SKIP LOCKED impede réplicas de duplicarem uma execução. Após uma indisponibilidade prolongada, é criada no máximo uma ocorrência atrasada por regra, referente ao primeiro horário perdido, e o próximo horário avança para o futuro; isso evita inundar a caixa de entrada. Pausar impede futuras ocorrências; retomar salta horários passados; cancelar é irreversível e não apaga o histórico. Avisos já criados seguem disponíveis para concluir ou cancelar individualmente.
+
+Os horários são sempre calculados no fuso America/Sao_Paulo. Regras não enviam e-mails, SMS, WhatsApp, Web Push ou executam ferramentas. O Node.js e PostgreSQL precisam estar ativos para processamento pontual; o navegador deve ficar aberto para notificações locais da V14.

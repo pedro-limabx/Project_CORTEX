@@ -18,3 +18,5 @@ CORTEX V12: lembretes pessoais únicos persistidos, triagem dos vencidos no back
 V13: proposta de lembrete em linguagem natural PT-BR no NEURON Chat, com interpretação determinística, fuso São Paulo explícito e confirmação separada antes de persistir.
 
 V14: acompanhamento de lembretes vencidos na aba e notificações locais genéricas do navegador por adesão explícita, sem push offline ou dados pessoais em notificações.
+
+V15: agendamento persistente diário/semanal com pausa, retomada e cancelamento, ocorrências transacionais deduplicadas no PostgreSQL e prévias supervisionadas no NEURON Chat.
