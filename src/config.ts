@@ -22,7 +22,11 @@ const schema = z.object({
   LLM_MODEL: z.string().optional(),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   CORTEX_API_TOKEN: z.preprocess(value => value === "" ? undefined : value, z.string().min(32).optional()),
-  CORTEX_USER_ID: z.string().min(1).default("local-user")
+  CORTEX_USER_ID: z.string().min(1).default("local-user"),
+  GOOGLE_CALENDAR_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CALENDAR_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_CALENDAR_REDIRECT_URI: z.string().url().optional(),
+  GOOGLE_CALENDAR_ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i).optional()
 });
 
 export function parseConfig(env: NodeJS.ProcessEnv) {

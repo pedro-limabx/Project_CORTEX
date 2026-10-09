@@ -37,6 +37,9 @@ import { interpretRecurringReminder } from "./reminders/recurrence-interpret.js"
 import { interpretAgendaQuestion, readAgenda, agendaAnswer } from "./reminders/agenda.js";
 import { exportAgendaIcs, CalendarExportTooLargeError } from "./reminders/ical.js";
 import {
+  GoogleCalendarReadOnly, GoogleCalendarAuthError, GoogleCalendarRemoteError
+} from "./integrations/google-calendar.js";
+import {
   InMemoryAlertAcknowledgementStore,
   PostgresAlertAcknowledgementStore,
   type AlertAcknowledgementStore
@@ -47,7 +50,9 @@ import {
 import { InMemoryWorkflowStore, PostgresWorkflowStore, type WorkflowStore } from "./workflows/store.js";
 import { WorkflowConflictError, WorkflowInputError, WorkflowNotFoundError } from "./workflows/types.js";
 
-const app = Fastify({ logger: true });
+// Google redirects carry a short-lived authorization code in the query string.
+ // Do not log request URLs; they may contain credentials or sensitive queries.
+const app = Fastify({ logger: {redact:["req.url"]} });
 
 if (config.NODE_ENV === "production" && !config.CORTEX_API_TOKEN) {
   throw new Error("CORTEX_API_TOKEN is required in production");
@@ -79,6 +84,18 @@ let alertAcknowledgements: AlertAcknowledgementStore;
 let autonomousStore: PostgresMonitorRepository | undefined;
 let reminderStore: PostgresReminderRepository | undefined;
 let recurrenceStore: PostgresRecurrenceRepository | undefined;
+const googleConfigured=Boolean(
+  pool && config.CORTEX_API_TOKEN && config.GOOGLE_CALENDAR_CLIENT_ID
+  && config.GOOGLE_CALENDAR_CLIENT_SECRET && config.GOOGLE_CALENDAR_REDIRECT_URI
+  && config.GOOGLE_CALENDAR_ENCRYPTION_KEY
+);
+const googleCalendar=googleConfigured&&pool
+  ?new GoogleCalendarReadOnly(pool,{
+    clientId:config.GOOGLE_CALENDAR_CLIENT_ID!,
+    clientSecret:config.GOOGLE_CALENDAR_CLIENT_SECRET!,
+    redirectUri:config.GOOGLE_CALENDAR_REDIRECT_URI!,
+    encryptionKey:config.GOOGLE_CALENDAR_ENCRYPTION_KEY!
+  }):undefined;
 if (pool) {
   const postgresMemory = new PostgresMemoryStore(pool);
   await postgresMemory.initialize();
@@ -104,6 +121,7 @@ if (pool) {
   await reminderStore.initialize();
   recurrenceStore = new PostgresRecurrenceRepository(pool);
   await recurrenceStore.initialize();
+  await googleCalendar?.initialize();
   app.log.info("Persistent PostgreSQL memory and audit enabled");
 } else {
   memory = new InMemoryStore();
@@ -476,6 +494,67 @@ app.post("/api/reminders/:id/:action", { preHandler: authenticate }, async (requ
   }
   return {reminder:await reminderStore.get(config.CORTEX_USER_ID,id),
     actionExecuted:false,approvalGranted:false};
+});
+
+// V18: Google Calendar OAuth with an explicit read-only scope.
+app.get("/api/integrations/google-calendar/status",{preHandler:authenticate},async()=>{
+  if(!googleCalendar)return {configured:false,connected:false,readOnly:true,
+    setupRequired:true,reason:!config.CORTEX_API_TOKEN
+      ?"Configure CORTEX_API_TOKEN para usar a integração."
+      :"Configure PostgreSQL e as quatro variáveis GOOGLE_CALENDAR_* no .env."};
+  return googleCalendar.status(config.CORTEX_USER_ID);
+});
+app.post("/api/integrations/google-calendar/connect",{preHandler:authenticate},async(request,reply)=>{
+  if(!googleCalendar)return reply.code(503).send({error:"Integração Google não configurada; consulte a documentação V18."});
+  if(request.body && (typeof request.body!=="object"||Array.isArray(request.body)
+      ||Object.keys(request.body).length!==0))
+    return reply.code(400).send({error:"Esta operação não aceita parâmetros"});
+  return googleCalendar.begin(config.CORTEX_USER_ID);
+});
+// Callback is intentionally without Bearer token: Google cannot supply our
+// private API token. Random one-use state, stored as a hash in PostgreSQL,
+// binds the callback to a previous authenticated request to /connect.
+// Request URL is redacted from server logs (contains authorization code).
+app.get("/api/integrations/google-calendar/callback",async(request,reply)=>{
+  reply.header("Cache-Control","no-store").header("Referrer-Policy","no-referrer");
+  if(!googleCalendar)return reply.code(503).send({error:"Integração Google não configurada"});
+  const query=request.query as {state?:unknown;code?:unknown;error?:unknown};
+  if(query.error!==undefined)return reply.redirect("/console?google_calendar=denied");
+  if(typeof query.state!=="string"||typeof query.code!=="string")
+    return reply.redirect("/console?google_calendar=invalid");
+  try{
+    await googleCalendar.finish(query.state,query.code);
+    return reply.redirect("/console?google_calendar=connected");
+  }catch(error){
+    // No OAuth tokens or codes are included in the redirect, logs or response.
+    return reply.redirect("/console?google_calendar=failed");
+  }
+});
+app.get("/api/integrations/google-calendar/events",{preHandler:authenticate},async(request,reply)=>{
+  if(!googleCalendar)return reply.code(503).send({error:"Integração Google não configurada"});
+  const period=(request.query as {period?:unknown}).period??"week";
+  if(period!=="today"&&period!=="tomorrow"&&period!=="week")
+    return reply.code(400).send({error:"period must be today, tomorrow or week"});
+  try{
+    const events=await googleCalendar.listEvents(config.CORTEX_USER_ID,period);
+    return reply.header("Cache-Control","private, no-store").send(events);
+  }catch(error){
+    if(error instanceof GoogleCalendarAuthError)
+      return reply.code(401).send({error:error.message});
+    if(error instanceof GoogleCalendarRemoteError)
+      return reply.code(502).send({error:error.message});
+    throw error;
+  }
+});
+app.post("/api/integrations/google-calendar/disconnect",{preHandler:authenticate},async(request,reply)=>{
+  if(!googleCalendar)return reply.code(503).send({error:"Integração Google não configurada"});
+  const body=request.body;
+  if(!body||typeof body!=="object"||Array.isArray(body)
+      ||Object.keys(body).length!==1||(body as {confirmed?:unknown}).confirmed!==true)
+    return reply.code(400).send({error:"confirmed=true é obrigatório"});
+  const disconnected=await googleCalendar.disconnect(config.CORTEX_USER_ID);
+  return {disconnected,remoteAccessRevoked:false,
+    message:"Credenciais locais descartadas. Para revogar o consentimento Google, acesse as configurações da conta Google."};
 });
 
 // V17: authenticated one-time iCalendar export. No OAuth, calendar account,
