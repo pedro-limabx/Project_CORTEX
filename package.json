@@ -15,7 +15,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "doctor:branding": "node scripts/doctor-branding.mjs",
-    "test:branding-doctor": "node --test scripts/doctor-branding.test.mjs"
+    "test:branding-doctor": "node --test scripts/doctor-branding.check.mjs"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",
