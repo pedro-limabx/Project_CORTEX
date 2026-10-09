@@ -57,14 +57,14 @@ export function agendaWindow(period:AgendaPeriod,now=new Date()) {
 export function interpretAgendaQuestion(message:string):AgendaPeriod|null {
   const text=message.normalize("NFD").replace(/[\u0300-\u036f]/g,"")
     .trim().toLowerCase().replace(/[?.!]+$/g,"").trim();
-  const prefix=/^(?:quais(?: sao)?(?: os)? meus (?:lembretes|compromissos)|quais(?: sao)? os meus (?:lembretes|compromissos)|o que (?:tenho|esta agendado)|(?:me mostre|mostre|mostrar|consulte|consultar|ver) (?:a )?(?:minha agenda|meus lembretes|meus compromissos)|(?:qual (?:e )?)?minha agenda)\b/u;
+  const prefix=/^(?:quais(?: sao)?(?: os)? meus (?:lembretes|compromissos)|quais(?: sao)? os meus (?:lembretes|compromissos)|o que (?:tenho(?: agendado)?|esta agendado)|(?:me mostre|mostre|mostrar|consulte|consultar|ver) (?:a )?(?:minha agenda|meus lembretes|meus compromissos)|(?:qual (?:e )?)?minha agenda)\b/u;
   const hit=prefix.exec(text);
   if(!hit)return null;
   const tail=text.slice(hit[0].length).trim();
   if(!tail)return "today";
   if(/^(?:de|para|da|do|na|no|nos|nesta|esta|desta)?\s*amanha$/u.test(tail))return "tomorrow";
   if(/^(?:de|para|da|do|na|no|nos|nesta|esta|desta)?\s*hoje$/u.test(tail))return "today";
-  if(/^(?:(?:de|para|da|do|na|no|nos|nesta|esta|desta)\s+)?(?:semana|esta semana|proxima semana|proximos 7 dias)$/u.test(tail))return "week";
+  if(/^(?:(?:de|para|da|do|na|no|nos|nesta|esta|desta)\s+)?(?:semana|esta semana|proxima semana|(?:os )?proximos 7 dias)$/u.test(tail))return "week";
   return null;
 }
 
