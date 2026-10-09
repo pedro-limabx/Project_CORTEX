@@ -1186,6 +1186,22 @@ function renderChatInspection(result) {
   target.append(headline("Resultados das ferramentas"), prettyBlock(result.toolResults || []));
 }
 
+$("#chat-agenda-today").addEventListener("click",()=>{
+  tab("chat");
+  if(chatSending){
+    showNotice("Aguarde a resposta atual do NEURON.");
+    return;
+  }
+  const input=$("#message");
+  if(input.value.trim()){
+    showNotice("Há um rascunho não enviado. Envie ou apague antes de consultar a agenda.");
+    input.focus();
+    return;
+  }
+  input.value="Quais são meus lembretes de hoje?";
+  void sendChatMessage();
+});
+
 // Quick status questions are read-only; never override an unfinished chat draft.
 function askWorkflowStatus(id) {
   tab("chat");
@@ -1206,21 +1222,6 @@ function askWorkflowStatus(id) {
 }
 
 $("#chat-workflow-status").addEventListener("click", () => askWorkflowStatus());
-$("#chat-agenda-today").addEventListener("click",()=>{
-  tab("chat");
-  if(chatSending){
-    showNotice("Aguarde a resposta atual do NEURON.");
-    return;
-  }
-  const input=$("#message");
-  if(input.value.trim()){
-    showNotice("Há um rascunho não enviado. Envie ou apague antes de consultar a agenda.");
-    input.focus();
-    return;
-  }
-  input.value="Quais são meus lembretes de hoje?";
-  void sendChatMessage();
-});
 
 // Workflows
 const presets = {

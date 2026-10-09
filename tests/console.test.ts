@@ -239,6 +239,35 @@ describe("CORTEX web console", () => {
     expect(chat.button.disabled).toBe(false);
   });
 
+
+  it("uses the agenda quick action only on click and preserves chat drafts", async () => {
+    const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
+    const start = source.indexOf('$("#chat-agenda-today").addEventListener("click"');
+    const end = source.indexOf("// Quick status questions", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const input = {value:"",focus:vi.fn()};
+    const sendChatMessage=vi.fn(),showNotice=vi.fn(),tab=vi.fn();
+    let clickHandler:(()=>void)|undefined;
+    const button={addEventListener:(_type:string,fn:()=>void)=>{clickHandler=fn;}};
+    runInNewContext(source.slice(start,end),{
+      $:(selector:string)=>selector==="#message"?input:button,
+      chatSending:false,sendChatMessage,showNotice,tab
+    });
+    expect(clickHandler).toBeDefined();
+    expect(sendChatMessage).not.toHaveBeenCalled();
+    clickHandler?.();
+    expect(tab).toHaveBeenCalledWith("chat");
+    expect(input.value).toBe("Quais são meus lembretes de hoje?");
+    expect(sendChatMessage).toHaveBeenCalledOnce();
+    input.value="rascunho não enviado";
+    clickHandler?.();
+    expect(input.value).toBe("rascunho não enviado");
+    expect(input.focus).toHaveBeenCalledOnce();
+    expect(sendChatMessage).toHaveBeenCalledOnce();
+    expect(showNotice).toHaveBeenCalledWith(expect.stringContaining("rascunho"));
+  });
+
   it("requests workflow summaries only on click and preserves unfinished chat drafts", async () => {
     const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
     const start = source.indexOf("function askWorkflowStatus(id) {");
