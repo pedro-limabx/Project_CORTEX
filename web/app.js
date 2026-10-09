@@ -755,7 +755,7 @@ $("#backend-notice-refresh").addEventListener("click", event =>
 $("#backend-notice-view").addEventListener("change", () => void action(loadBackendCenter));
 
 // V17: manual calendar export with in-memory Bearer token. Never expose a
-// token in URLs, anchor hrefs, logs or localStorage.
+// token in URLs, anchor hrefs, logs or persistent browser storage.
 async function downloadAgendaIcs(period) {
   if (!["today","tomorrow","week"].includes(period)) {
     throw new Error("Selecione um período válido para a exportação.");
