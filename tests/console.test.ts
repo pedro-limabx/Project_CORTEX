@@ -68,6 +68,7 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain('id="chat-agenda-today"');
     expect(index.body).toContain('id="chat-google-tomorrow"');
     expect(index.body).toContain('id="chat-unified-today"');
+    expect(script.body).toContain('for(const note of agenda.warnings??[])');
     expect(script.body).toContain('if(result?.unifiedAgenda)');
     expect(script.body).toContain('Agenda unificada · somente leitura');
     expect(script.body).toContain('if(result?.googleAgenda)');
@@ -304,6 +305,32 @@ describe("CORTEX web console", () => {
     expect(input.value).toBe("Não quero perder este texto");
     expect(input.focus).toHaveBeenCalledTimes(1);
     expect(sendChatMessage).toHaveBeenCalledTimes(1);
+    expect(showNotice).toHaveBeenCalledWith(expect.stringContaining("rascunho"));
+  });
+
+  it("V20 unified agenda shortcut protects unsent chat drafts", async () => {
+    const source=await readFile(resolve(process.cwd(),"web/app.js"),"utf8");
+    const start=source.indexOf('$("#chat-unified-today").addEventListener("click"');
+    const end=source.indexOf("// V17: manual calendar export",start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const input={value:"",focus:vi.fn()},tab=vi.fn(),sendChatMessage=vi.fn(),showNotice=vi.fn();
+    let click:(()=>void)|undefined;
+    const button={addEventListener:(_name:string,cb:()=>void)=>{click=cb;}};
+    runInNewContext(source.slice(start,end),{
+      $:(selector:string)=>selector==="#message"?input:button,
+      tab,sendChatMessage,showNotice,chatSending:false
+    });
+    expect(sendChatMessage).not.toHaveBeenCalled();
+    click?.();
+    expect(input.value).toBe("Minha agenda completa de hoje");
+    expect(tab).toHaveBeenCalledWith("chat");
+    expect(sendChatMessage).toHaveBeenCalledOnce();
+    input.value="meu rascunho particular";
+    click?.();
+    expect(input.value).toBe("meu rascunho particular");
+    expect(input.focus).toHaveBeenCalledOnce();
+    expect(sendChatMessage).toHaveBeenCalledOnce();
     expect(showNotice).toHaveBeenCalledWith(expect.stringContaining("rascunho"));
   });
 

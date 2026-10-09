@@ -63,7 +63,7 @@ describe("V20 unified agenda intent and deduplicated read-only view",()=>{
       title:"Reunião   mensal",start:"2026-10-10T17:00:00.000Z",
       cortexKind:"saved",sources:["cortex","google"]
     });
-    expect(result.items.filter(x=>x.title.trim().toLowerCase()==="reunião mensal")).toHaveLength(4);
+    expect(result.items.filter(x=>x.title.trim().replace(/\s+/gu," ").toLowerCase()==="reunião mensal")).toHaveLength(4);
     const day=result.items[0];
     expect(day).toMatchObject({allDay:true,start:"2026-10-10",sources:["google"]});
     expect(result.items.some(x=>x.cortexKind==="recurrence-preview"&&x.sources[0]==="cortex")).toBe(true);
@@ -74,7 +74,7 @@ describe("V20 unified agenda intent and deduplicated read-only view",()=>{
   it("runs locally if OAuth is unconfigured or not connected; never makes remote event request",async()=>{
     const dependencies={
       reminders:{listWindow:vi.fn(async()=>local.items.filter(x=>x.source==="saved").map(x=>({
-        id:x.id,title:x.title,dueAt:x.dueAt,status:x.status,
+        id:x.id,title:x.title,dueAt:x.dueAt,status:x.status==="DUE"?"DUE" as const:"PENDING" as const,
         createdAt:now.toISOString(),triggeredAt:null,completedAt:null,cancelledAt:null
       })))},
       recurrences:{listActive:vi.fn(async()=>[])}
