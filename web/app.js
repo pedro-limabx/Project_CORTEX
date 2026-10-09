@@ -182,7 +182,7 @@ async function action(operation, button = null) {
 }
 function tab(name) {
   const labels = {
-    overview: "Visão geral", monitoring: "Monitoramento", alerts: "Alertas", reminders: "Lembretes", chat: "NEURON Chat",
+    overview: "Visão geral", monitoring: "Monitoramento", alerts: "Alertas", reminders: "Lembretes", "google-calendar":"Google Agenda", chat: "NEURON Chat",
     workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
   };
   if (!labels[name]) return;
@@ -193,6 +193,7 @@ function tab(name) {
   if (name === "monitoring") action(loadMonitoring);
   if (name === "alerts") action(loadAlertCenter);
   if (name === "reminders") action(loadReminders);
+  if (name === "google-calendar") action(loadGoogleCalendarStatus);
   if (name === "workflows") action(loadWorkflows);
   if (name === "tasks") action(loadTasks);
   if (name === "tools") action(loadTools);
@@ -753,6 +754,79 @@ $("#backend-monitor-check").addEventListener("click", event => action(async () =
 $("#backend-notice-refresh").addEventListener("click", event =>
   action(loadBackendCenter, event.currentTarget));
 $("#backend-notice-view").addEventListener("change", () => void action(loadBackendCenter));
+
+// V18 Google Calendar: optional read-only integration, never shares the
+// NEURON Bearer token or exposes Google OAuth tokens to the browser.
+async function loadGoogleCalendarStatus(){
+  const status=await api("/api/integrations/google-calendar/status");
+  const label=$("#google-calendar-status");
+  if(!status.configured){
+    label.textContent="Integração indisponível: "+(status.reason||"faltam credenciais OAuth.");
+  }else{
+    label.textContent=status.connected
+      ?"Google Agenda conectado (somente leitura)."
+      :"Google Agenda disponível para conexão; sua conta ainda não foi autorizada.";
+  }
+  $("#google-calendar-connect").hidden=!status.configured||status.connected;
+  $("#google-calendar-disconnect").hidden=!status.connected;
+  $("#google-calendar-events").disabled=!status.connected;
+  if(status.connected)clear($("#google-calendar-auth-link"));
+}
+function formatGoogleEventDate(value,allDay){
+  if(allDay)return value.split("-").reverse().join("/")+" · Dia inteiro";
+  const date=new Date(value);
+  return Number.isFinite(date.getTime())
+    ?date.toLocaleString("pt-BR",{
+      timeZone:"America/Sao_Paulo",dateStyle:"short",timeStyle:"short"
+    })+" · São Paulo":String(value);
+}
+async function loadGoogleEvents(){
+  const period=$("#google-calendar-period").value;
+  if(!["today","tomorrow","week"].includes(period))throw new Error("Período inválido");
+  const data=await api("/api/integrations/google-calendar/events?period="+encodeURIComponent(period));
+  const list=clear($("#google-calendar-event-list"));
+  $("#google-calendar-event-status").textContent=data.events.length+
+    " evento(s) do Google consultado(s). "+(data.truncated
+      ?"O resultado foi limitado; podem existir mais eventos.":"");
+  if(!data.events.length){list.append(info("Nenhum evento neste período."));return;}
+  for(const event of data.events){
+    const card=node("div","resource-row");
+    card.append(node("strong","",event.title),
+      node("p","row-meta",formatGoogleEventDate(event.start,event.allDay)));
+    list.append(card);
+  }
+}
+$("#google-calendar-connect").addEventListener("click",event=>action(async()=>{
+  if(!window.confirm("Deseja autorizar o CORTEX a CONSULTAR seus eventos do Google Agenda? "+
+    "A conexão não permitirá criar, editar ou excluir eventos."))return;
+  const data=await api("/api/integrations/google-calendar/connect",{method:"POST",body:{}});
+  const url=new URL(data.authorizationUrl);
+  if(url.origin!=="https://accounts.google.com"||url.pathname!=="/o/oauth2/v2/auth")
+    throw new Error("Endereço de autorização inesperado.");
+  const anchor=node("a","btn btn-primary","Continuar no Google ↗");
+  anchor.href=url.toString();
+  anchor.target="_blank";
+  anchor.rel="noopener noreferrer";
+  const target=clear($("#google-calendar-auth-link"));
+  target.append(node("p","hint","Abra o link abaixo e autorize no Google. Depois retorne e clique em Verificar conexão."),anchor);
+  $("#google-calendar-status").textContent="Autorização preparada. Ela expira em 10 minutos.";
+},event.currentTarget));
+$("#google-calendar-refresh").addEventListener("click",event=>action(
+  loadGoogleCalendarStatus,event.currentTarget));
+$("#google-calendar-events").addEventListener("click",event=>action(
+  loadGoogleEvents,event.currentTarget));
+$("#google-calendar-disconnect").addEventListener("click",event=>action(async()=>{
+  if(!window.confirm("Remover os tokens Google salvos pelo CORTEX? "+
+    "Isso não revoga o consentimento diretamente na Conta Google."))return;
+  await api("/api/integrations/google-calendar/disconnect",{
+    method:"POST",body:{confirmed:true}
+  });
+  clear($("#google-calendar-event-list"));
+  $("#google-calendar-event-status").textContent="Conexão local removida.";
+  clear($("#google-calendar-auth-link"));
+  await loadGoogleCalendarStatus();
+  showNotice("Tokens Google locais removidos. Revogue também o consentimento no Google, se desejar.","success");
+},event.currentTarget));
 
 // V17: manual calendar export with in-memory Bearer token. Never expose a
 // token in URLs, anchor hrefs, logs or persistent browser storage.
