@@ -30,3 +30,5 @@ V18: conexão opcional Google Agenda com OAuth 2.0/PKCE, permissões somente lei
 V19: consultas explícitas ao Google Agenda no NEURON Chat, com distinção de origem, limites de paginação e orientação quando a integração OAuth não está ativa; preserva escopo somente leitura.
 
 V20: visão unificada sob demanda de lembretes CORTEX e eventos Google autorizados no NEURON Chat e API, com identificação das fontes, combinação conservadora de títulos/instantes e fallback local quando o Google não está conectado.
+
+V21: análise conservadora somente leitura dos conflitos entre eventos Google com duração e lembretes pontuais do CORTEX; avisos de dados ausentes e horários tentativos para avaliação humana, sem reagendamento automático.

@@ -81,3 +81,21 @@ A API `GET /api/agenda/unified?period=today|tomorrow|week` reutiliza a consulta 
 O calendário usa a zona civil `America/Sao_Paulo`; os eventos externos de dia inteiro mantêm a data sem conversão de fuso. Respostas de texto resumem até 10 resultados; a visualização oferece até 50 itens mesclados, podendo ser parcial porque o CORTEX limita a leitura a 30 entradas e o Google a 50. A propriedade `truncated` sinaliza limites ou paginação de qualquer origem. Não há sincronização, escrita, importação automática, persistência de eventos externos, execução de ferramentas nem envio de eventos a um LLM. Apenas a renovação de credenciais OAuth já autorizadas pode atualizar o armazenamento de tokens.
 
 Se o PostgreSQL interno estiver indisponível, a consulta unificada retorna 503, em vez de inventar lembretes. Perguntas fora de hoje, amanhã e próximos 7 dias recebem orientação. Esta versão **não estabelece** uma conta Google real: a configuração OAuth e o consentimento precisam ser concluídos no Codespaces para obter eventos do Google.
+
+## V21 — Análise de conflitos na agenda (somente leitura)
+
+A V21 permite perguntar ao NEURON Chat: **Tenho conflitos na agenda amanhã?**, **Verifique conflitos na agenda hoje** ou **Analise sobreposições na agenda nos próximos 7 dias**. Há um atalho **Conflitos amanhã** que não descarta rascunhos.
+
+A API autenticada GET /api/agenda/conflicts?period=today|tomorrow|week reutiliza a V20 e devolve conflitos, sugestões, contagens e avisos. As operações apenas leem a agenda, sem modificar o CORTEX ou o Google.
+
+Regras conservadoras:
+- Dois eventos Google com início e término válidos que compartilham tempo são classificados como sobreposição **confirmada de eventos**.
+- Um lembrete pontual do CORTEX durante um evento Google gera um **possível conflito**, porque não se conhece a duração do lembrete. Recorrências ainda não executadas são previsões.
+- Um registro já combinado CORTEX+Google não entra em conflito consigo mesmo.
+- Eventos de dia inteiro não são automaticamente considerados 24 horas ocupadas e exigem atenção manual. Eventos sem fim válido geram aviso de análise incompleta.
+- Até 20 conflitos por consulta são apresentados. Os 50 itens da V20 e a paginação das fontes podem reduzir a cobertura; isso é explicitamente sinalizado.
+
+Até quatro **sugestões tentativas de 30 minutos** entre 9h e 18h, no horário de São Paulo, evitam intervalos ocupados e lembretes conhecidos. Dias com eventos de dia inteiro são excluídos dessas sugestões. Não existe uma consulta completa de disponibilidade nem garantia de horário vago, especialmente quando o Google está desconectado ou o resultado é parcial. O usuário deve verificar o calendário antes de alterar sua agenda.
+
+A análise não envia dados de eventos para um LLM nem autoriza reagendamento, exclusão, criação, notificação automática ou sincronização. OAuth segue com escopo apenas de leitura. Sem PostgreSQL retorna HTTP 503. Sem Google conectado, consulta só o CORTEX e avisa a limitação.
+

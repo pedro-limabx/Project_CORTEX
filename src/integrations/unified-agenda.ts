@@ -12,6 +12,8 @@ export type UnifiedQuestion=AgendaPeriod|"unsupported"|null;
 export type GoogleAvailability="not-configured"|"not-connected"|"connected"|"reconnect"|"unavailable";
 export type UnifiedItem={
   id:string; title:string; start:string; allDay:boolean;
+  /** Actual Google event end. Absent for CORTEX reminders (instant only). */
+  end?:string|null;
   sources:Array<"cortex"|"google">;
   cortexKind?:"saved"|"recurrence-preview";
   cortexStatus?:"PENDING"|"DUE"|"PROJECTED";
@@ -91,10 +93,11 @@ export function mergeUnifiedAgenda(local:AgendaSnapshot,external:GoogleEventsSna
       ?.find(row=>!row.sources.includes("google"));
     if(candidate){
       candidate.sources.push("google");
+      candidate.end=event.end;
       merged++;
     }else{
       rows.push({id:"google:"+event.id,title:event.title,start:date,
-        allDay:event.allDay,sources:["google"]});
+        end:event.end,allDay:event.allDay,sources:["google"]});
     }
   }
   rows.sort(order);

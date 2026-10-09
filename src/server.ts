@@ -41,6 +41,9 @@ import {
   interpretUnifiedAgendaQuestion,getUnifiedAgenda,unifiedAgendaAnswer
 } from "./integrations/unified-agenda.js";
 import {
+  interpretConflictQuestion,analyzeAgendaConflicts,conflictAnswer
+} from "./integrations/agenda-conflicts.js";
+import {
   GoogleCalendarReadOnly, GoogleCalendarAuthError, GoogleCalendarRemoteError
 } from "./integrations/google-calendar.js";
 import {
@@ -586,6 +589,22 @@ app.get("/api/agenda/export",{preHandler:authenticate},async(request,reply)=>{
     .send(body);
 });
 
+// V21: owner-scoped, read-only detection of overlapping calendar times.
+app.get("/api/agenda/conflicts",{preHandler:authenticate},async(request,reply)=>{
+  if(!reminderStore||!recurrenceStore)
+    return reply.code(503).send({error:"PostgreSQL is required for agenda conflict analysis"});
+  const period=(request.query as {period?:unknown}).period??"today";
+  if(period!=="today"&&period!=="tomorrow"&&period!=="week")
+    return reply.code(400).send({error:"period must be today, tomorrow or week"});
+  const now=new Date();
+  const agenda=await getUnifiedAgenda(
+    {reminders:reminderStore,recurrences:recurrenceStore},
+    googleCalendar,config.CORTEX_USER_ID,period,now
+  );
+  return reply.header("Cache-Control","private, no-store")
+    .send(analyzeAgendaConflicts(agenda,now));
+});
+
 // V20: read-only composite view; a Google failure cannot erase local reminders.
 app.get("/api/agenda/unified",{preHandler:authenticate},async(request,reply)=>{
   if(!reminderStore||!recurrenceStore)
@@ -766,6 +785,29 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
 
   if (typeof body.message !== "string" || body.message.trim().length === 0) {
     return reply.code(400).send({ error: "message is required" });
+  }
+
+  // V21: supervised read-only schedule diagnostics, never create or move
+  // Google events/reminders or send third-party content into an LLM.
+  const conflictPeriod=interpretConflictQuestion(body.message.trim());
+  if(conflictPeriod){
+    if(conflictPeriod==="unsupported")return reply.header("Cache-Control","private, no-store").send({
+      requestId:crypto.randomUUID(),mode:"agenda-conflicts-help",
+      conflictHelp:{reason:"unsupported-period"},
+      text:"Consigo verificar conflitos hoje, amanhã ou nos próximos 7 dias. Experimente: 'Tenho conflitos na agenda amanhã?'",
+      actionExecuted:false,readOnly:true
+    });
+    if(!reminderStore||!recurrenceStore)
+      return reply.code(503).send({error:"PostgreSQL is required for conflict analysis"});
+    const now=new Date();
+    const unified=await getUnifiedAgenda({reminders:reminderStore,recurrences:recurrenceStore},
+      googleCalendar,config.CORTEX_USER_ID,conflictPeriod,now);
+    const conflictReport=analyzeAgendaConflicts(unified,now);
+    return reply.header("Cache-Control","private, no-store").send({
+      requestId:crypto.randomUUID(),mode:"agenda-conflicts-readonly",
+      text:conflictAnswer(conflictReport),conflictReport,
+      actionExecuted:false,readOnly:true
+    });
   }
 
   // V20: explicit unified questions have priority over V19 Google-only
