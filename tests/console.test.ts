@@ -68,6 +68,9 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain('id="chat-agenda-today"');
     expect(index.body).toContain('id="chat-google-tomorrow"');
     expect(index.body).toContain('id="chat-unified-today"');
+    expect(index.body).toContain('id="chat-conflicts-tomorrow"');
+    expect(script.body).toContain('if(result?.conflictReport)');
+    expect(script.body).toContain('Conflitos · somente leitura');
     expect(script.body).toContain('for(const note of agenda.warnings??[])');
     expect(script.body).toContain('if(result?.unifiedAgenda)');
     expect(script.body).toContain('Agenda unificada · somente leitura');
@@ -329,6 +332,31 @@ describe("CORTEX web console", () => {
     input.value="meu rascunho particular";
     click?.();
     expect(input.value).toBe("meu rascunho particular");
+    expect(input.focus).toHaveBeenCalledOnce();
+    expect(sendChatMessage).toHaveBeenCalledOnce();
+    expect(showNotice).toHaveBeenCalledWith(expect.stringContaining("rascunho"));
+  });
+
+  it("V21 conflict quick action preserves unfinished chat drafts",async()=>{
+    const source=await readFile(resolve(process.cwd(),"web/app.js"),"utf8");
+    const start=source.indexOf('$("#chat-conflicts-tomorrow").addEventListener("click"');
+    const end=source.indexOf("// V20 quick unified agenda query",start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const input={value:"",focus:vi.fn()},tab=vi.fn(),sendChatMessage=vi.fn(),showNotice=vi.fn();
+    let click:(()=>void)|undefined;
+    const button={addEventListener:(_type:string,fn:()=>void)=>{click=fn;}};
+    runInNewContext(source.slice(start,end),{
+      $:(selector:string)=>selector==="#message"?input:button,
+      tab,sendChatMessage,showNotice,chatSending:false
+    });
+    expect(sendChatMessage).not.toHaveBeenCalled();
+    click?.();
+    expect(input.value).toBe("Tenho conflitos na agenda amanhã?");
+    expect(sendChatMessage).toHaveBeenCalledOnce();
+    input.value="rascunho importante";
+    click?.();
+    expect(input.value).toBe("rascunho importante");
     expect(input.focus).toHaveBeenCalledOnce();
     expect(sendChatMessage).toHaveBeenCalledOnce();
     expect(showNotice).toHaveBeenCalledWith(expect.stringContaining("rascunho"));
