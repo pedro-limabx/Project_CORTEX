@@ -14,9 +14,16 @@ export class PostgresAgendaProposalStore {
       await client.query([
         "CREATE TABLE IF NOT EXISTS cortex_agenda_proposals (",
         "id UUID PRIMARY KEY,user_id TEXT NOT NULL,",
-        "status TEXT NOT NULL CHECK (status IN ('PENDING_REVIEW','APPROVED','REJECTED')),",
+        "status TEXT NOT NULL CHECK (status IN ('PENDING_REVIEW','APPROVED','REJECTED','APPLIED')),",
         "state JSONB NOT NULL,expires_at TIMESTAMPTZ NOT NULL,",
         "created_at TIMESTAMPTZ NOT NULL,reviewed_at TIMESTAMPTZ)"
+      ].join(" "));
+      // Upgrade existing V22 databases, retaining all prior proposal records.
+      await client.query("ALTER TABLE cortex_agenda_proposals DROP CONSTRAINT IF EXISTS cortex_agenda_proposals_status_check");
+      await client.query([
+        "ALTER TABLE cortex_agenda_proposals",
+        "ADD CONSTRAINT cortex_agenda_proposals_status_check",
+        "CHECK (status IN ('PENDING_REVIEW','APPROVED','REJECTED','APPLIED'))"
       ].join(" "));
       await client.query([
         "CREATE INDEX IF NOT EXISTS cortex_agenda_proposals_owner_recent",
@@ -73,6 +80,90 @@ export class PostgresAgendaProposalStore {
     ].join(" "),[user,id]);
     return result.rows[0]?this.hydrate(result.rows[0]):null;
   }
+  // V23 applies only already approved internal reminder plans in one PostgreSQL
+  // transaction. Approval alone remains a non-mutating decision.
+  async applyInternalReminder(user:string,id:string,expected:StoredPlan,
+    now=new Date()):Promise<{
+      proposal:StoredPlan;reminder:{id:string;title:string;previousDueAt:string;dueAt:string}
+    }|null>{
+    const client=await this.pool.connect();
+    try{
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1),23023)",[user]);
+      const current=await client.query<{state:AgendaPlan;expires_at:Date|string;status:string}>([
+        "SELECT state,expires_at,status FROM cortex_agenda_proposals",
+        "WHERE id=$1::uuid AND user_id=$2 FOR UPDATE"
+      ].join(" "),[id,user]);
+      const row=current.rows[0],plan=row?.state;
+      if(!row||!plan||row.status!=="APPROVED"||plan.status!=="APPROVED"
+          ||plan.appliedAt||plan.source!=="cortex"
+          ||new Date(row.expires_at).getTime()<=now.getTime()
+          ||!/^cortex:[0-9a-f-]{36}$/i.test(plan.targetId)
+          ||plan.targetId!==expected.targetId
+          ||plan.originalStart!==expected.originalStart
+          ||plan.proposedStart!==expected.proposedStart
+          ||plan.conflictKey!==expected.conflictKey
+          ||plan.title!==expected.title
+          ||plan.proposedEnd!==null||plan.originalEnd!==null){
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const reminderId=plan.targetId.slice("cortex:".length);
+      const locked=await client.query<{
+        id:string;title:string;status:string;due_at:Date|string
+      }>([
+        "SELECT id,title,status,due_at FROM cortex_reminders",
+        "WHERE id=$1::uuid AND user_id=$2 FOR UPDATE"
+      ].join(" "),[reminderId,user]);
+      const reminder=locked.rows[0];
+      if(!reminder||reminder.title!==plan.title||reminder.status!=="PENDING"
+          ||new Date(reminder.due_at).toISOString()!==plan.originalStart
+          ||Date.parse(plan.proposedStart)<now.getTime()+60_000){
+        await client.query("ROLLBACK");
+        return null;
+      }
+      // Guard against newly persisted reminder instants since the snapshot.
+      // External Google changes must be checked separately before this txn.
+      const occupied=await client.query([
+        "SELECT id FROM cortex_reminders",
+        "WHERE user_id=$1 AND id<>$2::uuid AND status IN ('PENDING','DUE')",
+        "AND due_at >= $3::timestamptz",
+        "AND due_at < ($3::timestamptz + interval '30 minutes') LIMIT 1"
+      ].join(" "),[user,reminderId,plan.proposedStart]);
+      if(occupied.rows.length){
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const move=await client.query([
+        "UPDATE cortex_reminders SET due_at=$3::timestamptz",
+        "WHERE id=$1::uuid AND user_id=$2 AND title=$4",
+        "AND status='PENDING' AND due_at=$5::timestamptz",
+        "AND $3::timestamptz>NOW()+interval '1 minute'",
+        "RETURNING id"
+      ].join(" "),[reminderId,user,plan.proposedStart,plan.title,plan.originalStart]);
+      if(move.rows.length!==1){
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const at=now.toISOString();
+      const updated=await client.query<{state:AgendaPlan;expires_at:Date|string}>([
+        "UPDATE cortex_agenda_proposals SET status='APPLIED',",
+        "state=state||jsonb_build_object('status','APPLIED','appliedAt',$3::text,'updatedAt',$3::text)",
+        "WHERE id=$1::uuid AND user_id=$2 AND status='APPROVED'",
+        "AND expires_at>NOW() RETURNING state,expires_at"
+      ].join(" "),[id,user,at]);
+      if(updated.rows.length!==1){
+        await client.query("ROLLBACK");
+        return null;
+      }
+      await client.query("COMMIT");
+      return {proposal:this.hydrate(updated.rows[0]!),
+        reminder:{id:reminderId,title:plan.title,
+          previousDueAt:plan.originalStart,dueAt:plan.proposedStart}};
+    }catch(error){await client.query("ROLLBACK");throw error;}
+    finally{client.release();}
+  }
+
   async review(user:string,id:string,decision:"approve"|"reject"):Promise<StoredPlan|null>{
     const status:PlanStatus=decision==="approve"?"APPROVED":"REJECTED";
     const updated=await this.pool.query<{state:AgendaPlan;expires_at:Date|string}>([

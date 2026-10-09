@@ -5,18 +5,41 @@ import type {AgendaPeriod} from "../reminders/agenda.js";
 import type {AgendaConflict,ConflictReport} from "./agenda-conflicts.js";
 import type {UnifiedAgenda,UnifiedItem} from "./unified-agenda.js";
 
-export type PlanStatus="PENDING_REVIEW"|"APPROVED"|"REJECTED";
+export type PlanStatus="PENDING_REVIEW"|"APPROVED"|"REJECTED"|"APPLIED";
 export type AgendaPlan={
   id:string;period:AgendaPeriod;conflictKey:string;targetId:string;
   title:string;source:"google"|"cortex";originalStart:string;originalEnd:string|null;
   proposedStart:string;proposedEnd:string|null;
   status:PlanStatus;createdAt:string;updatedAt:string;expiresAt:string;
-  reviewedAt:string|null;externalChangeApplied:false;
+  reviewedAt:string|null;appliedAt?:string|null;externalChangeApplied:false;
 };
 export type PlanDraft=Omit<AgendaPlan,
   "id"|"status"|"createdAt"|"updatedAt"|"expiresAt"|"reviewedAt"|"externalChangeApplied">;
 export class PlanInputError extends Error {}
 export class PlanConflictError extends Error {}
+
+// V23 never trusts a stored suggestion as current availability. Recompute the
+// exact original conflict and the candidate against today's live sources.
+export function validateInternalApplication(plan:AgendaPlan,agenda:UnifiedAgenda,
+  report:ConflictReport,now=new Date()):void {
+  if(plan.source!=="cortex"||plan.status!=="APPROVED"||plan.appliedAt)
+    throw new PlanConflictError("Somente propostas aprovadas de lembretes CORTEX podem ser aplicadas.");
+  if(plan.originalEnd!==null||plan.proposedEnd!==null
+      ||!/^cortex:[0-9a-f-]{36}$/i.test(plan.targetId))
+    throw new PlanConflictError("A proposta não corresponde a um lembrete pontual válido.");
+  if(Date.parse(plan.expiresAt)<=now.getTime())
+    throw new PlanConflictError("Proposta vencida. Gere uma nova análise antes de aplicar.");
+  const target=Date.parse(plan.proposedStart);
+  if(!Number.isFinite(target)||target<now.getTime()+60_000)
+    throw new PlanConflictError("O horário proposto está muito próximo ou no passado.");
+  const current=draftAgendaPlan(agenda,report,plan.conflictKey,plan.targetId,now);
+  if(current.source!=="cortex"||current.title!==plan.title
+    ||current.originalStart!==plan.originalStart
+    ||current.originalEnd!==plan.originalEnd
+    ||current.proposedStart!==plan.proposedStart
+    ||current.proposedEnd!==plan.proposedEnd)
+    throw new PlanConflictError("A agenda mudou e a proposta está desatualizada. Gere uma nova análise.");
+}
 
 const SLOT_MS=30*60_000;
 const DAY_MS=86_400_000;

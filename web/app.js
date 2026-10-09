@@ -94,6 +94,7 @@ const statusLabels = {
   PENDING_REVIEW: "Aguardando revisão",
   APPROVED: "Plano aprovado",
   REJECTED: "Plano rejeitado",
+  APPLIED: "Aplicado ao CORTEX",
   EXPIRED: "Expirado"
 };
 
@@ -873,6 +874,24 @@ async function loadAgendaProposals(){
         }));
       }
     }
+    if(plan.status==="APPROVED"&&plan.source==="cortex"
+      &&Date.parse(plan.expiresAt)>Date.now()){
+      actions.append(makeButton("✓ Aplicar horário ao lembrete CORTEX",
+        "btn-primary small",async()=>{
+          if(!window.confirm("Aplicar o NOVO HORÁRIO a este lembrete CORTEX? "+
+            "Este é um comando real e irá alterar a data no PostgreSQL. "+
+            "O Google Agenda NÃO será modificado."))return;
+          const result=await api("/api/agenda/proposals/"+
+            encodeURIComponent(plan.id)+"/apply",{
+              method:"POST",body:{confirmed:true}
+            });
+          await loadAgendaProposals();
+          showNotice("Lembrete atualizado: "+dateTime(result.reminder.previousDueAt)+
+            " → "+dateTime(result.reminder.dueAt)+". Google não alterado.","success");
+        }));
+    }
+    if(plan.status==="APPLIED")entry.append(node("p","hint",
+      "Novo horário aplicado ao lembrete CORTEX · Google não alterado."));
     entry.append(actions);
     list.append(entry);
   }
