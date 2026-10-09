@@ -81,3 +81,15 @@ Comandos de chat reconhecidos incluem:
 - `Mostre minha agenda para os próximos 7 dias`
 
 O chat retorna `mode=agenda-readonly` e um objeto `agenda` com itens `saved` (registros persistidos) e `recurrence-preview` (projeções **ainda não gravadas**). A saída é limitada a 30 itens por consulta, com indicador `truncated` se a amostra foi reduzida. Consulta até 100 registros e 100 regras ativas para manter custos previsíveis. Filtros excluem lembretes concluídos e cancelados. Consultas não acionam a máquina de estados, e resultados podem refletir atraso do worker se ele estiver pausado. Uma pergunta fora dos padrões suportados segue o comportamento normal do NEURON. Isso não representa integração com calendários externos.
+
+## V17 — Exportação manual para calendários (.ics)
+
+A aba **Lembretes** agora permite exportar uma cópia iCalendar para aplicativos como Google Agenda, Outlook e Apple Calendar. Escolha Hoje, Amanhã ou Próximos 7 dias, clique **Exportar .ics**, leia o aviso de privacidade e importe o arquivo manualmente no aplicativo desejado. O Chat do NEURON também mostra **Exportar período .ics** depois de consultar a agenda.
+
+A rota autenticada GET /api/agenda/export?period=today|tomorrow|week utiliza o mesmo recorte limitado de dados da V16, consulta apenas o CORTEX_USER_ID definido pelo servidor, não altera os lembretes e não chama serviços externos. Responde no formato text/calendar com Content-Disposition de download e cabeçalhos private, no-store e nosniff. O navegador envia o token somente no cabeçalho Authorization, nunca na URL ou localStorage.
+
+O arquivo contém VEVENTs de instante (DTSTART UTC, sem duração arbitrária). Títulos são escapados e linhas dobradas conforme RFC 5545 para conter injeções de calendário e caracteres UTF-8. UIDs são estáveis por registro e identidade sem divulgar IDs internos. Recorrências futuras recebem [Previsão] no título e uma descrição explicando que são estimativas, não registros persistidos. Não há RRULE ou alerta VALARM associado: o destino controla seus próprios avisos.
+
+Se a consulta ultrapassar 30 entradas, a exportação é recusada com HTTP 409 para impedir a transferência silenciosa de dados incompletos. Tente um período menor. Um calendário vazio pode ser exportado sem eventos.
+
+**Importante:** arquivos .ics incluem títulos e horários privados. Guarde-os com cuidado. Esta versão oferece **importação manual de uma fotografia pontual**, não sincronização bidirecional, conexão de contas via OAuth, assinatura de calendário, atualização automática nem garantia de notificações do aplicativo importador.

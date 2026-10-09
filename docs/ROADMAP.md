@@ -22,3 +22,5 @@ V14: acompanhamento de lembretes vencidos na aba e notificações locais genéri
 V15: agendamento persistente diário/semanal com pausa, retomada e cancelamento, ocorrências transacionais deduplicadas no PostgreSQL e prévias supervisionadas no NEURON Chat.
 
 V16: consulta da agenda pelo NEURON Chat e API autenticada, com janelas locais de hoje/amanhã/7 dias, leitura limitada e distinção explícita entre lembretes persistidos e recorrências previstas.
+
+V17: exportação autenticada da agenda em iCalendar (.ics) para importação manual em outros aplicativos, com privacidade, escapes RFC 5545 e rejeição de resultados parciais.
