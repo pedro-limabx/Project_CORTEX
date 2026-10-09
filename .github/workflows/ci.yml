@@ -43,5 +43,7 @@ jobs:
         run: npm run typecheck
       - name: Tests (with PostgreSQL)
         run: npm test
+      - name: Branding diagnostics unit tests
+        run: npm run test:branding-doctor
       - name: Build
         run: npm run build
