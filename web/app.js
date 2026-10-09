@@ -828,6 +828,19 @@ $("#google-calendar-disconnect").addEventListener("click",event=>action(async()=
   showNotice("Tokens Google locais removidos. Revogue também o consentimento no Google, se desejar.","success");
 },event.currentTarget));
 
+// V21 shortcut: send only after click, and never overwrite an unfinished draft.
+$("#chat-conflicts-tomorrow").addEventListener("click",()=>{
+  tab("chat");
+  if(chatSending){showNotice("Aguarde a consulta atual.");return;}
+  const input=$("#message");
+  if(input.value.trim()){
+    showNotice("Há um rascunho não enviado. Envie ou apague antes de verificar conflitos.");
+    input.focus();return;
+  }
+  input.value="Tenho conflitos na agenda amanhã?";
+  void sendChatMessage();
+});
+
 // V20 quick unified agenda query: optional Google account, no discarded drafts.
 $("#chat-unified-today").addEventListener("click",()=>{
   tab("chat");
@@ -1192,6 +1205,42 @@ $("#chat-form").addEventListener("submit", (event) => {
 });
 function renderChatInspection(result) {
   const target = clear($("#chat-inspect"));
+  if(result?.conflictReport){
+    const report=result.conflictReport;
+    target.append(node("span","status completed","Conflitos · somente leitura"));
+    target.append(headline("Sobreposições da agenda · São Paulo"));
+    textDetail(target,"Período",{
+      today:"Hoje",tomorrow:"Amanhã",week:"Próximos 7 dias"
+    }[report.period]||"—");
+    textDetail(target,"Fonte",report.google==="connected"
+      ?"CORTEX e Google":"CORTEX · Google não consultado");
+    textDetail(target,"Conflitos",String(report.conflicts.length)+
+      (report.truncated?" · amostra parcial":""));
+    for(const warning of report.warnings??[])target.append(info(warning));
+    if(!report.conflicts.length)target.append(info(
+      "Sem sobreposições detectadas nos intervalos conhecidos desta amostra."));
+    for(const item of report.conflicts){
+      const entry=node("div","workflow-step");
+      entry.append(node("strong","",item.first.title+" × "+item.second.title),
+        node("p","row-meta",dateTime(item.at)+" · "+
+          (item.severity==="confirmed"?"Sobreposição de eventos":"Possível conflito pontual")),
+        node("p","hint",item.explanation));
+      target.append(entry);
+    }
+    if(report.suggestions.length){
+      target.append(headline("Sugestões tentativas · 30 minutos"));
+      for(const slot of report.suggestions)
+        target.append(node("p","row-meta",dateTime(slot.start)+" a "+
+          dateTime(slot.end)+" · confirme antes de reagendar"));
+    }
+    target.append(node("p","hint","Nenhum compromisso foi alterado."));
+    return;
+  }
+  if(result?.conflictHelp){
+    target.append(headline("Conflitos · selecione um período"));
+    target.append(info(result.text||"Use hoje, amanhã ou próximos 7 dias."));
+    return;
+  }
   if(result?.unifiedAgenda){
     const agenda=result.unifiedAgenda;
     target.append(node("span","status completed","Agenda unificada · somente leitura"));
