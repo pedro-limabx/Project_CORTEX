@@ -10,7 +10,8 @@ const periods:Record<string,AgendaPeriod>={
   "semana":"week","nos proximos 7 dias":"week",
   "proximos 7 dias":"week","os proximos 7 dias":"week"
 };
-export function interpretGoogleCalendarQuestion(message:string):AgendaPeriod|null {
+export type GoogleQuestion = AgendaPeriod | "unsupported" | null;
+export function interpretGoogleCalendarQuestion(message:string):GoogleQuestion {
   const normalized=message.normalize("NFD").replace(/[\u0300-\u036f]/g,"")
     .trim().toLowerCase().replace(/[?.!]+$/u,"").trim();
   const match=prefix.exec(normalized);
@@ -18,7 +19,9 @@ export function interpretGoogleCalendarQuestion(message:string):AgendaPeriod|nul
   const tail=normalized.slice(match[0].length).trim();
   if(!tail)return "today";
   const period=tail.replace(/^(?:de|para|da|do|na|no|nesta|nos)\s+/u,"");
-  return periods[period]??null;
+  // Explicit Google/meeting questions must not silently fall through to an LLM
+  // just because the requested date is ambiguous or unsupported.
+  return periods[period]??"unsupported";
 }
 
 const ptPeriod:Record<AgendaPeriod,string>={

@@ -758,6 +758,11 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
   // The provider has only Google's calendar.events.readonly OAuth scope.
   const googlePeriod=interpretGoogleCalendarQuestion(body.message.trim());
   if(googlePeriod){
+    if(googlePeriod==="unsupported"){
+      return {requestId:crypto.randomUUID(),mode:"google-calendar-help",
+        text:"Ainda reconheço apenas consultas ao Google Agenda para hoje, amanhã ou os próximos 7 dias. Reformule a pergunta, por exemplo: 'Quais reuniões tenho amanhã?'",
+        googleCalendarHelp:{reason:"unsupported-period"},actionExecuted:false,readOnly:true};
+    }
     if(!googleCalendar){
       return {requestId:crypto.randomUUID(),mode:"google-calendar-help",
         text:"A integração com Google Agenda ainda não foi configurada. Configure OAuth na aba Google Agenda e depois conecte sua conta.",

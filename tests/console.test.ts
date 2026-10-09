@@ -66,6 +66,10 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain('if(result?.recurringProposal)');
     expect(script.body).toContain('if(result?.agenda)');
     expect(index.body).toContain('id="chat-agenda-today"');
+    expect(index.body).toContain('id="chat-google-tomorrow"');
+    expect(script.body).toContain('if(result?.googleAgenda)');
+    expect(script.body).toContain('if(result?.googleCalendarHelp)');
+    expect(script.body).toContain('Google Agenda · somente leitura');
     expect(index.body).toContain('id="export-calendar"');
     expect(index.body).toContain('id="agenda-export-period"');
     expect(script.body).toContain('async function downloadAgendaIcs(period)');

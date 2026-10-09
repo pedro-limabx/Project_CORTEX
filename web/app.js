@@ -1175,6 +1175,37 @@ $("#chat-form").addEventListener("submit", (event) => {
 });
 function renderChatInspection(result) {
   const target = clear($("#chat-inspect"));
+  if(result?.googleAgenda){
+    const agenda=result.googleAgenda;
+    target.append(node("span","status completed","Google Agenda · somente leitura"));
+    target.append(headline("Eventos do calendário principal · São Paulo"));
+    textDetail(target,"Período",{
+      today:"Hoje",tomorrow:"Amanhã",week:"Próximos 7 dias"
+    }[agenda.period]||"—");
+    textDetail(target,"Origem","Google Agenda (externo) · não são lembtes internos do CORTEX".replace("lembtes","lembretes"));
+    if(!agenda.events.length)target.append(info("O Google não retornou eventos neste período."));
+    for(const event of agenda.events){
+      const entry=node("div","workflow-step");
+      const when=event.allDay
+        ?event.start.split("-").reverse().join("/")+" · Dia inteiro"
+        :dateTime(event.start)+" · São Paulo";
+      entry.append(node("strong","",event.title),
+        node("p","row-meta",when+" · Google Agenda"));
+      target.append(entry);
+    }
+    if(agenda.truncated)target.append(info(
+      "Lista parcial: o Google informou que há mais eventos além dos resultados carregados."));
+    target.append(makeButton("Consultar Google Agenda ↗","btn-outline",
+      ()=>tab("google-calendar")));
+    return;
+  }
+  if(result?.googleCalendarHelp){
+    target.append(headline("Google Agenda · configuração necessária"));
+    target.append(info(result.text||"Verifique a conexão do Google Agenda."));
+    target.append(makeButton("Abrir Google Agenda ↗","btn-outline",
+      ()=>tab("google-calendar")));
+    return;
+  }
   if(result?.agenda){
     const agenda=result.agenda;
     target.append(node("span","status completed","Consulta somente leitura"));
@@ -1317,6 +1348,23 @@ $("#chat-agenda-today").addEventListener("click",()=>{
     return;
   }
   input.value="Quais são meus lembretes de hoje?";
+  void sendChatMessage();
+});
+
+// V19 quick Google query: explicit click and never overwrite a chat draft.
+$("#chat-google-tomorrow").addEventListener("click",()=>{
+  tab("chat");
+  if(chatSending){
+    showNotice("Aguarde a consulta atual antes de solicitar outra.");
+    return;
+  }
+  const input=$("#message");
+  if(input.value.trim()){
+    showNotice("Há um rascunho não enviado. Envie ou apague antes de consultar o Google.");
+    input.focus();
+    return;
+  }
+  input.value="Quais reuniões tenho amanhã?";
   void sendChatMessage();
 });
 
