@@ -881,6 +881,34 @@ $("#chat-form").addEventListener("submit", (event) => {
 });
 function renderChatInspection(result) {
   const target = clear($("#chat-inspect"));
+  if (result?.reminderProposal) {
+    const reminder = result.reminderProposal;
+    const meta = node("div","detail-meta");
+    meta.append(node("span","status pending","Aguardando sua confirmação"));
+    target.append(meta,headline("Prévia do lembrete"));
+    textDetail(target,"Assunto",reminder.title);
+    textDetail(target,"Quando",dateTime(reminder.dueAt)+" · São Paulo (SP)");
+    target.append(node("p","hint","Somente um aviso no painel. Nenhum lembrete foi criado ainda."));
+    target.append(makeButton("✓ Confirmar e agendar","btn-primary",async () => {
+      if (state.lastChat !== result) {
+        showNotice("Esta prévia não é mais a mensagem selecionada. Envie o comando novamente.");
+        return;
+      }
+      const created = await api("/api/reminders",{method:"POST",body:{
+        title:reminder.title,dueAt:reminder.dueAt
+      }});
+      state.lastChat = null; // prevents accidental repeated confirmation
+      target.append(node("p","hint","Lembrete criado e armazenado: "+created.reminder.id));
+      target.querySelectorAll("button").forEach(button => {button.disabled = true;});
+      showNotice("Lembrete confirmado e salvo no PostgreSQL.","success");
+      try { await loadReminders(); } catch { /* The creation succeeded even if refresh fails. */ }
+    }));
+    return;
+  }
+  if (result?.reminderGuidance) {
+    target.append(info("Comando de lembrete não compreendido. Nada foi agendado."));
+    return;
+  }
   if (result?.workflowReport) {
     const report = result.workflowReport;
     const pill = node("div", "detail-meta");

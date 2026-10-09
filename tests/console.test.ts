@@ -59,6 +59,8 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain('playing.catch(showFallback)');
     expect(script.body).toContain('api("/api/reminders"');
     expect(script.body).toContain('function loadReminders()');
+    expect(script.body).toContain('if (result?.reminderProposal)');
+    expect(script.body).toContain('Confirmar e agendar');
     expect(script.body).toContain('api("/api/workflows/propose"');
     expect(script.body).toContain("{{steps.primeiro.result}}/3");
     expect(script.body).toContain("{{steps.a.result}}+{{steps.b.result}}");
