@@ -2,12 +2,13 @@
 // Google events carry actual start/end; CORTEX reminders are instants, not
 // invented meetings. All-day events are advisory, not timed busy blocks.
 import {nextRecurrenceAfter} from "../reminders/recurrence.js";
+import {agendaConflictKey} from "./agenda-reorganization.js";
 import type {AgendaPeriod} from "../reminders/agenda.js";
 import type {UnifiedAgenda,UnifiedItem} from "./unified-agenda.js";
 
 export type ConflictKind="event-overlap"|"reminder-during-event";
 export type AgendaConflict={
-  kind:ConflictKind;severity:"confirmed"|"potential";
+  key?:string;kind:ConflictKind;severity:"confirmed"|"potential";
   first:{id:string;title:string;source:string};
   second:{id:string;title:string;source:string};
   at:string;until:string|null;
@@ -93,7 +94,7 @@ export function analyzeAgendaConflicts(agenda:UnifiedAgenda,now=new Date()):Conf
   const conflicts:AgendaConflict[]=[];
   let excess=false;
   function add(conflict:AgendaConflict) {
-    if(conflicts.length<MAX_CONFLICTS)conflicts.push(conflict);
+    if(conflicts.length<MAX_CONFLICTS)conflicts.push({...conflict,key:agendaConflictKey(conflict)});
     else excess=true;
   }
   for(let i=0;i<busy.length;i++){

@@ -44,6 +44,10 @@ import {
   interpretConflictQuestion,analyzeAgendaConflicts,conflictAnswer
 } from "./integrations/agenda-conflicts.js";
 import {
+  draftAgendaPlan,PlanInputError,PlanConflictError
+} from "./integrations/agenda-reorganization.js";
+import {PostgresAgendaProposalStore,ProposalQuotaError} from "./integrations/agenda-proposal-store.js";
+import {
   GoogleCalendarReadOnly, GoogleCalendarAuthError, GoogleCalendarRemoteError
 } from "./integrations/google-calendar.js";
 import {
@@ -91,6 +95,7 @@ let alertAcknowledgements: AlertAcknowledgementStore;
 let autonomousStore: PostgresMonitorRepository | undefined;
 let reminderStore: PostgresReminderRepository | undefined;
 let recurrenceStore: PostgresRecurrenceRepository | undefined;
+let agendaProposalStore:PostgresAgendaProposalStore|undefined;
 const googleConfigured=Boolean(
   pool && config.CORTEX_API_TOKEN && config.GOOGLE_CALENDAR_CLIENT_ID
   && config.GOOGLE_CALENDAR_CLIENT_SECRET && config.GOOGLE_CALENDAR_REDIRECT_URI
@@ -128,6 +133,10 @@ if (pool) {
   await reminderStore.initialize();
   recurrenceStore = new PostgresRecurrenceRepository(pool);
   await recurrenceStore.initialize();
+  if(config.CORTEX_API_TOKEN){
+    agendaProposalStore=new PostgresAgendaProposalStore(pool);
+    await agendaProposalStore.initialize();
+  }
   await googleCalendar?.initialize();
   app.log.info("Persistent PostgreSQL memory and audit enabled");
 } else {
@@ -587,6 +596,72 @@ app.get("/api/agenda/export",{preHandler:authenticate},async(request,reply)=>{
     .header("Content-Disposition",'attachment; filename="cortex-agenda-'+period+'.ics"')
     .type("text/calendar; charset=utf-8")
     .send(body);
+});
+
+// V22: proposal decisions are owner-scoped and never modify actual events.
+// A configured Bearer token is mandatory for this stateful feature, including
+// development. POST creation recomputes the agenda instead of trusting UI data.
+app.get("/api/agenda/proposals",{preHandler:authenticate},async(request,reply)=>{
+  if(!agendaProposalStore)
+    return reply.code(503).send({error:"Configure PostgreSQL e CORTEX_API_TOKEN para propostas."});
+  const raw=(request.query as {limit?:unknown}).limit;
+  const limit=raw===undefined?30:Number(raw);
+  if(!Number.isInteger(limit)||limit<1||limit>50)
+    return reply.code(400).send({error:"limit deve estar entre 1 e 50"});
+  const proposals=await agendaProposalStore.list(config.CORTEX_USER_ID,limit);
+  return reply.header("Cache-Control","private, no-store")
+    .send({proposals,appliesChanges:false});
+});
+app.post("/api/agenda/proposals",{preHandler:authenticate},async(request,reply)=>{
+  if(!agendaProposalStore||!reminderStore||!recurrenceStore)
+    return reply.code(503).send({error:"Configure PostgreSQL e CORTEX_API_TOKEN para propostas."});
+  const body=request.body;
+  if(!body||Array.isArray(body)||typeof body!=="object")
+    return reply.code(400).send({error:"Informe period, conflictKey, targetId e confirmed=true"});
+  const data=body as Record<string,unknown>;
+  if(Object.keys(data).length!==4||!["today","tomorrow","week"].includes(String(data.period))
+    ||typeof data.conflictKey!=="string"||!/^[0-9a-f]{32}$/i.test(data.conflictKey)
+    ||typeof data.targetId!=="string"||data.targetId.length>512||!data.targetId
+    ||data.confirmed!==true)
+    return reply.code(400).send({error:"Dados de proposta inválidos ou confirmação ausente"});
+  const now=new Date();
+  const period=data.period as "today"|"tomorrow"|"week";
+  const unified=await getUnifiedAgenda(
+    {reminders:reminderStore,recurrences:recurrenceStore},
+    googleCalendar,config.CORTEX_USER_ID,period,now
+  );
+  const report=analyzeAgendaConflicts(unified,now);
+  try{
+    const draft=draftAgendaPlan(unified,report,data.conflictKey,data.targetId,now);
+    const plan=await agendaProposalStore.create(config.CORTEX_USER_ID,draft,now);
+    return reply.header("Cache-Control","private, no-store").code(201)
+      .send({proposal:plan,externalChangeApplied:false});
+  }catch(error){
+    if(error instanceof PlanInputError)return reply.code(400).send({error:error.message});
+    if(error instanceof PlanConflictError)return reply.code(409).send({error:error.message});
+    if(error instanceof ProposalQuotaError)return reply.code(429).send({error:error.message});
+    throw error;
+  }
+});
+app.post("/api/agenda/proposals/:id/:decision",{preHandler:authenticate},async(request,reply)=>{
+  if(!agendaProposalStore)
+    return reply.code(503).send({error:"Configure PostgreSQL e CORTEX_API_TOKEN para propostas."});
+  const {id,decision}=request.params as {id:string;decision:string};
+  const body=request.body;
+  if(!reminderUuid.test(id)||!["approve","reject"].includes(decision)
+      ||!body||Array.isArray(body)||typeof body!=="object"
+      ||Object.keys(body).length!==1||(body as {confirmed?:unknown}).confirmed!==true)
+    return reply.code(400).send({error:"ID, decisão e confirmed=true são obrigatórios"});
+  const updated=await agendaProposalStore.review(config.CORTEX_USER_ID,id,
+    decision as "approve"|"reject");
+  if(!updated){
+    const current=await agendaProposalStore.get(config.CORTEX_USER_ID,id);
+    return reply.code(current?409:404).send({error:current
+      ?"A proposta não está pendente ou expirou. Gere uma nova proposta.":"Proposta não encontrada"});
+  }
+  return reply.header("Cache-Control","private, no-store")
+    .send({proposal:updated,externalChangeApplied:false,
+      message:"Decisão registrada. Nenhum compromisso foi alterado."});
 });
 
 // V21: owner-scoped, read-only detection of overlapping calendar times.
