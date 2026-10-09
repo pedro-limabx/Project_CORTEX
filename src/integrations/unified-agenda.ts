@@ -3,7 +3,10 @@
 import {readAgenda,type AgendaPeriod,type AgendaSnapshot} from "../reminders/agenda.js";
 import type {ReminderRepository} from "../reminders/store.js";
 import type {PostgresRecurrenceRepository} from "../reminders/recurrence-store.js";
-import type {GoogleCalendarReadOnly,GoogleEventsSnapshot,GoogleEvent} from "./google-calendar.js";
+import {
+  GoogleCalendarAuthError,
+  type GoogleCalendarReadOnly,type GoogleEventsSnapshot,type GoogleEvent
+} from "./google-calendar.js";
 
 export type UnifiedQuestion=AgendaPeriod|"unsupported"|null;
 export type GoogleAvailability="not-configured"|"not-connected"|"connected"|"reconnect"|"unavailable";
@@ -27,7 +30,7 @@ export function interpretUnifiedAgendaQuestion(value:string):UnifiedQuestion {
   const match=lead.exec(text);
   if(!match)return null;
   const tail=text.slice(match[0].length).trim()
-    .replace(/^(?:(?:de|da|do|para|na|no|nos|nesta|desta)\s+)/u,"");
+    .replace(/^(?:(?:de|da|do|dos|das|para|para os|na|no|nos|nesta|desta)\s+)/u,"");
   if(!tail)return "today";
   if(tail==="hoje")return "today";
   if(tail==="amanha")return "tomorrow";
@@ -132,7 +135,7 @@ export async function getUnifiedAgenda(
   }catch(error){
     // External failures must never erase successfully loaded local reminders.
     // Avoid returning a Google error containing any OAuth credential or response.
-    const authError=error instanceof Error && error.name==="GoogleCalendarAuthError";
+    const authError=error instanceof GoogleCalendarAuthError;
     return mergeUnifiedAgenda(internal,null,authError?"reconnect":"unavailable");
   }
 }

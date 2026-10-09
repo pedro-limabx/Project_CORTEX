@@ -774,6 +774,7 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
   if(unifiedPeriod){
     if(unifiedPeriod==="unsupported")return reply.header("Cache-Control","private, no-store").send({
       requestId:crypto.randomUUID(),mode:"unified-agenda-help",
+      unifiedAgendaHelp:{reason:"unsupported-period"},
       text:"A agenda unificada aceita hoje, amanhã ou os próximos 7 dias. Reformule sua pergunta, por exemplo: 'Minha agenda completa de amanhã'.",
       actionExecuted:false,readOnly:true
     });
