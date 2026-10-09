@@ -44,3 +44,16 @@ Horários de calendário são interpretados em **America/Sao_Paulo** (fuso de S�
 A resposta do chat contém `mode: "reminder-preview"`, `created: false` e `reminderProposal: {title, dueAt, timeZone, requiresConfirmation: true}`. No painel, o botão **Confirmar e agendar** chama a rota autenticada `POST /api/reminders`, única operação que grava o lembrete no PostgreSQL. Esta prévia não executa ferramentas, LLMs, integrações externas ou escrita em banco. O indicador "Simular" continua sendo apenas prévia (como todos os comandos de lembretes no chat).
 
 Sem banco PostgreSQL, solicitações de lembrete pelo chat retornam 503, em vez de sugerir que o agendamento será persistido. A confirmação permanece necessária a cada lembrete; reenvios explícitos podem criar novos itens. Integração semântica livre via LLM, linguagem recorrente e notificações externas ainda não fazem parte da V13.
+
+## V14 — Acompanhamento de lembretes e avisos locais no navegador
+
+O painel de **Lembretes** tem dois comandos independentes e opcionais:
+
+- **Ativar acompanhamento** consulta lembretes vencidos a cada 30 segundos, enquanto a aba está aberta. Inicializa uma linha de base silenciosa: não notifica lembretes já vencidos antes da ativação.
+- **Ativar avisos do navegador** solicita a permissão do navegador *somente após clicar*. Com ambos ativados, um novo vencimento apresenta aviso genérico do sistema operacional, sem incluir o título ou outras informações pessoais. Clique para voltar à aba de Lembretes.
+
+A contagem de lembretes `DUE` aparece na navegação e atualiza ao abrir a aba ou durante o acompanhamento. Notificações de sistema só acontecem se: monitoramento estiver ligado, o site estiver em contexto seguro (HTTPS/localhost), a permissão for concedida e houver novo vencimento após a ativação.
+
+Proteções: monitoramento e avisos são **desativados por padrão e não persistem entre recarregamentos**; a seleção de IDs é mantida na memória da aba para suprimir duplicações; avisos mais antigos não são disparados em massa; uma única notificação genérica representa vários vencimentos detectados no mesmo ciclo. A consulta retorna no máximo 100 registros vencidos — não é varredura histórica ilimitada.
+
+**Limitações:** não existe Service Worker, Web Push, push móvel, background sync, SMS, e-mail ou entrega quando a aba está fechada. Em segundo plano, navegadores podem limitar a frequência dos timers. O PostgreSQL e o processo Node precisam estar ativos para a atualização dos estados; o servidor não garante entrega ao sistema operacional. O sistema não executa ferramentas ou outras ações ao disparar esses avisos.

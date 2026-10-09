@@ -285,6 +285,14 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 .status.done { color:#80e3b9;border-color:#245e4c;background:#143a31 }
 .status.cancelled { color:#a5adba;border-color:#495365;background:#29303b }
 
+/* V14: explicit, opt-in session-only reminders + browser notices. */
+.nav-reminder-count { margin-left:auto;min-width:22px;padding:2px 6px;border-radius:99px;background:#5a481e;color:#ffe4ab;text-align:center;font-size:11px;font-variant-numeric:tabular-nums }
+.nav-reminder-count[hidden] { display:none!important }
+.reminder-watch-controls { display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:14px 0;border-top:1px solid var(--border);padding-top:14px }
+.reminder-watch-controls .hint { flex-basis:100%;margin:0;line-height:1.5 }
+.reminder-watch-controls .btn { white-space:normal }
+@media (max-width:650px) { .reminder-watch-controls { flex-direction:column;align-items:stretch } }
+
 /* CORTEX brand / opening film. Uses only fixed local media URLs. */
 .brand { gap:11px;padding-left:7px;padding-right:7px }
 .brand-icon { position:relative;display:grid;place-items:center;flex:none;width:54px;height:54px;overflow:hidden;border:none;background:transparent;border-radius:0;box-shadow:none }
