@@ -11,6 +11,9 @@ const envBoolean = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+const optionalSetting=(minLength=1) => z.preprocess(value => value === "" ? undefined : value,
+  z.string().min(minLength).optional());
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -22,7 +25,13 @@ const schema = z.object({
   LLM_MODEL: z.string().optional(),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   CORTEX_API_TOKEN: z.preprocess(value => value === "" ? undefined : value, z.string().min(32).optional()),
-  CORTEX_USER_ID: z.string().min(1).default("local-user")
+  CORTEX_USER_ID: z.string().min(1).default("local-user"),
+  GOOGLE_CALENDAR_CLIENT_ID: optionalSetting(),
+  GOOGLE_CALENDAR_CLIENT_SECRET: optionalSetting(),
+  GOOGLE_CALENDAR_REDIRECT_URI: z.preprocess(value => value === "" ? undefined : value,
+    z.string().url().optional()),
+  GOOGLE_CALENDAR_ENCRYPTION_KEY: z.preprocess(value => value === "" ? undefined : value,
+    z.string().regex(/^[0-9a-f]{64}$/i).optional())
 });
 
 export function parseConfig(env: NodeJS.ProcessEnv) {

@@ -24,3 +24,5 @@ V15: agendamento persistente diário/semanal com pausa, retomada e cancelamento,
 V16: consulta da agenda pelo NEURON Chat e API autenticada, com janelas locais de hoje/amanhã/7 dias, leitura limitada e distinção explícita entre lembretes persistidos e recorrências previstas.
 
 V17: exportação autenticada da agenda em iCalendar (.ics) para importação manual em outros aplicativos, com privacidade, escapes RFC 5545 e rejeição de resultados parciais.
+
+V18: conexão opcional Google Agenda com OAuth 2.0/PKCE, permissões somente leitura, credenciais criptografadas no PostgreSQL e consulta supervisionada. Sem escrita em calendários, sincronização ou autorização automática.
