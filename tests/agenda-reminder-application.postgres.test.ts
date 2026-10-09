@@ -62,12 +62,14 @@ suite("V23 atomic application in PostgreSQL",()=>{
     expect(await proposals.applyInternalReminder(user,approved.id,approved)).toBeNull();
     expect((await proposals.get(user,approved.id))?.status).toBe("APPROVED");
     expect((await reminders.get(user,reminder.id))?.dueAt).toBe(original);
-    const second=await setup(randomUUID());
+    const secondUser=randomUUID(),second=await setup(secondUser);
     if(!pool)throw new Error("Postgres unavailable");
     await pool.query("UPDATE cortex_agenda_proposals SET expires_at=NOW()-INTERVAL '1 minute' WHERE id=$1",
       [second.approved.id]);
-    expect(await second.proposals.applyInternalReminder(second.reminder.id,
+    expect(await second.proposals.applyInternalReminder(secondUser,
       second.approved.id,second.approved)).toBeNull();
+    expect((await second.reminders.get(secondUser,second.reminder.id))?.dueAt)
+      .toBe(second.original);
   });
   it("refuses to occupy another persisted reminder in a 30-minute candidate window",async()=>{
     const user=randomUUID(),{proposals,approved,reminders,alternative,reminder}=await setup(user);
