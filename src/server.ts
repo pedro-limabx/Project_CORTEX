@@ -44,7 +44,7 @@ import {
   interpretConflictQuestion,analyzeAgendaConflicts,conflictAnswer
 } from "./integrations/agenda-conflicts.js";
 import {
-  draftAgendaPlan,PlanInputError,PlanConflictError
+  draftAgendaPlan,validateInternalApplication,PlanInputError,PlanConflictError
 } from "./integrations/agenda-reorganization.js";
 import {PostgresAgendaProposalStore,ProposalQuotaError} from "./integrations/agenda-proposal-store.js";
 import {
@@ -662,6 +662,47 @@ app.post("/api/agenda/proposals/:id/:decision",{preHandler:authenticate},async(r
   return reply.header("Cache-Control","private, no-store")
     .send({proposal:updated,externalChangeApplied:false,
       message:"Decisão registrada. Nenhum compromisso foi alterado."});
+});
+
+// V23: application is a SECOND, explicit confirmation, separate from approval.
+// Only a saved PENDING CORTEX reminder can be moved, never Google events or
+// projected recurrence slots. Recheck live sources first; use SQL CAS and one
+// transaction for the reminder change and immutable decision history.
+app.post("/api/agenda/proposals/:id/apply",{preHandler:authenticate},async(request,reply)=>{
+  if(!agendaProposalStore||!reminderStore||!recurrenceStore)
+    return reply.code(503).send({error:"Configure PostgreSQL e CORTEX_API_TOKEN para aplicar."});
+  const {id}=request.params as {id:string};
+  const body=request.body;
+  if(!reminderUuid.test(id)||!body||typeof body!=="object"||Array.isArray(body)
+     ||Object.keys(body).length!==1||(body as {confirmed?:unknown}).confirmed!==true)
+    return reply.code(400).send({error:"ID válido e confirmed=true são obrigatórios"});
+  const plan=await agendaProposalStore.get(config.CORTEX_USER_ID,id);
+  if(!plan)return reply.code(404).send({error:"Proposta não encontrada"});
+  const now=new Date();
+  if(plan.source!=="cortex")
+    return reply.code(409).send({error:"Eventos Google só podem ser alterados manualmente. A integração é somente leitura."});
+  if(plan.status!=="APPROVED"||plan.appliedAt||Date.parse(plan.expiresAt)<=now.getTime())
+    return reply.code(409).send({error:"Proposta não aprovada, já aplicada ou vencida. Gere uma nova proposta."});
+  const unified=await getUnifiedAgenda(
+    {reminders:reminderStore,recurrences:recurrenceStore},
+    googleCalendar,config.CORTEX_USER_ID,plan.period,now
+  );
+  const report=analyzeAgendaConflicts(unified,now);
+  try{
+    validateInternalApplication(plan,unified,report,now);
+    const result=await agendaProposalStore.applyInternalReminder(
+      config.CORTEX_USER_ID,id,plan,now);
+    if(!result)return reply.code(409).send({
+      error:"O lembrete ou a proposta mudou durante a confirmação. Atualize a agenda e crie outra proposta."});
+    return reply.header("Cache-Control","private, no-store").send({
+      ...result,internalReminderUpdated:true,externalChangeApplied:false,
+      message:"Horário do lembrete CORTEX atualizado. Nenhum evento Google foi alterado."
+    });
+  }catch(error){
+    if(error instanceof PlanInputError||error instanceof PlanConflictError)
+      return reply.code(409).send({error:error.message});
+    throw error;
+  }
 });
 
 // V21: owner-scoped, read-only detection of overlapping calendar times.
