@@ -287,9 +287,9 @@ textarea { resize:vertical;line-height:1.65;min-height:98px }
 
 /* CORTEX brand / opening film. Uses only fixed local media URLs. */
 .brand { gap:11px;padding-left:7px;padding-right:7px }
-.brand-icon { position:relative;display:grid;place-items:center;flex:none;width:54px;height:54px;overflow:hidden;border:none;background:#000;border-radius:50%;box-shadow:0 0 17px #57cce013 }
-.brand-icon img { position:absolute;inset:0;width:100%;height:100%;object-fit:contain;mix-blend-mode:screen }
-.brand-fallback { color:var(--blue);font-size:25px }
+.brand-icon { position:relative;display:grid;place-items:center;flex:none;width:54px;height:54px;overflow:hidden;border:none;background:transparent;border-radius:0;box-shadow:none }
+.brand-icon img { position:absolute;inset:0;width:100%;height:100%;object-fit:contain;mix-blend-mode:normal }
+.brand-fallback { display:none }
 .brand strong { font-size:19px }
 .brand small { letter-spacing:.08em;font-size:8px }
 body.cortex-opening { overflow:hidden }

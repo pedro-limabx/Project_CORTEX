@@ -9,7 +9,7 @@ const filePaths = {
   html: resolve(process.cwd(), "web/index.html"),
   css: resolve(process.cwd(), "web/styles.css"),
   javascript: resolve(process.cwd(), "web/app.js"),
-  logo: resolve(process.cwd(), "web/assets/cortex-logo.webp"),
+  logo: resolve(process.cwd(), "web/assets/cortex-logo.png"),
   intro: resolve(process.cwd(), "web/assets/cortex-intro.mp4")
 };
 
@@ -72,10 +72,10 @@ export function registerConsole(app: FastifyInstance): void {
     return browserHeaders(reply).type("application/javascript; charset=utf-8").send(javascript);
   });
 
-  app.get("/console/media/logo.webp", async (_request, reply) => {
+  app.get("/console/media/logo.png", async (_request, reply) => {
     try {
       const logo = await readFile(filePaths.logo);
-      return browserHeaders(reply).type("image/webp").send(logo);
+      return browserHeaders(reply).type("image/png").send(logo);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return browserHeaders(reply).code(404).send({ error: "Brand logo asset not installed" });
