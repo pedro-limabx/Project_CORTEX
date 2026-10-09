@@ -29,3 +29,18 @@ A operação no PostgreSQL usa `FOR UPDATE SKIP LOCKED` e atualização atômica
 Concluir/cancelar exige confirmação explícita e nunca altera workflows. Os títulos ficam armazenados no PostgreSQL e devem ser protegidos com os controles de acesso à instância. Para uso público, configure NODE_ENV=production e CORTEX_API_TOKEN de pelo menos 32 caracteres, TLS e persistência confiável.
 
 Testes: `npm run typecheck && npm test && npm run build`; com DATABASE_URL de teste, a suíte `tests/reminders.postgres.test.ts` valida concorrência, reinício, transições e isolamento.
+
+## V13 — Proposta de lembrete no chat
+
+Agora `POST /api/chat` detecta comandos explícitos e simples como:
+
+- `Lembre-me amanhã às 14h de revisar o projeto`
+- `Lembre-me de beber água em 30 minutos`
+- `Me lembre de ligar para alguém hoje às 17h30`
+- `Lembre-me dia 25/12/2026 às 09h30 de ligar para família`
+
+Horários de calendário são interpretados em **America/Sao_Paulo** (fuso de São Paulo); durações relativas usam o relógio do servidor. O interpretador é **determinístico e limitado** — não usa LLM para inventar datas. Instruções vagas como "amanhã de manhã" recebem mensagem de orientação, sem criar item. Valores fora da janela de 1 minuto a 2 anos são recusados.
+
+A resposta do chat contém `mode: "reminder-preview"`, `created: false` e `reminderProposal: {title, dueAt, timeZone, requiresConfirmation: true}`. No painel, o botão **Confirmar e agendar** chama a rota autenticada `POST /api/reminders`, única operação que grava o lembrete no PostgreSQL. Esta prévia não executa ferramentas, LLMs, integrações externas ou escrita em banco. O indicador "Simular" continua sendo apenas prévia (como todos os comandos de lembretes no chat).
+
+Sem banco PostgreSQL, solicitações de lembrete pelo chat retornam 503, em vez de sugerir que o agendamento será persistido. A confirmação permanece necessária a cada lembrete; reenvios explícitos podem criar novos itens. Integração semântica livre via LLM, linguagem recorrente e notificações externas ainda não fazem parte da V13.

@@ -30,6 +30,7 @@ import { AutonomousMonitoringService, InAppNotificationChannel, validateMonitorS
 import { diagnoseMonitorHealth } from "./autonomy/diagnostics.js";
 import { PostgresReminderRepository } from "./reminders/store.js";
 import { ReminderScheduler, ReminderInputError, validateNewReminder } from "./reminders/service.js";
+import { interpretReminder } from "./reminders/interpret.js";
 import {
   InMemoryAlertAcknowledgementStore,
   PostgresAlertAcknowledgementStore,
@@ -588,6 +589,28 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
     return reply.code(400).send({ error: "message is required" });
   }
 
+  // Limited deterministic command support. This only prepares a reminder;
+  // it NEVER writes to PostgreSQL without the explicit UI confirmation.
+  // Every other chat command continues through the existing NEURON pipeline.
+  const reminderDraft = interpretReminder(body.message.trim());
+  if (reminderDraft) {
+    if (!reminderStore) {
+      return reply.code(503).send({error:"PostgreSQL is required to save reminders"});
+    }
+    if (reminderDraft.kind === "help") return {
+      requestId: crypto.randomUUID(), mode: "reminder-help",
+      text: reminderDraft.message, reminderGuidance: true, created: false
+    };
+    return {
+      requestId: crypto.randomUUID(), mode: "reminder-preview",
+      text: "Preparei um lembrete para você. Confira assunto, data e hora e clique em Confirmar e agendar para salvá-lo.",
+      reminderProposal: {
+        title: reminderDraft.title, dueAt: reminderDraft.dueAt,
+        timeZone: reminderDraft.timeZone, requiresConfirmation: true
+      },
+      created: false, dryRun: body.dryRun === true
+    };
+  }
   // Identity is server-controlled; clients cannot grant permissions or approve tools.
   const options = body.dryRun === true
     ? {
