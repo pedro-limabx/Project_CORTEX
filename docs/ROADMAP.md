@@ -34,3 +34,5 @@ V20: visão unificada sob demanda de lembretes CORTEX e eventos Google autorizad
 V21: análise conservadora somente leitura dos conflitos entre eventos Google com duração e lembretes pontuais do CORTEX; avisos de dados ausentes e horários tentativos para avaliação humana, sem reagendamento automático.
 
 V22: propostas persistentes de reorganização de agenda com escolha explícita do compromisso, geração no backend, preservação de duração, expiração e aprovação/rejeição atômicas. Aprovação não modifica compromissos externos ou internos.
+
+V23: aplicação explícita e transacional de propostas aprovadas apenas em lembretes internos PENDING do CORTEX, com revalidação, proteção contra replay e registro APPLIED; nenhuma alteração em eventos Google ou regras de recorrência.

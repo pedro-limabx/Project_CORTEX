@@ -69,6 +69,11 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain('id="chat-google-tomorrow"');
     expect(index.body).toContain('id="chat-unified-today"');
     expect(index.body).toContain('id="chat-conflicts-tomorrow"');
+    expect(index.body).toContain('data-tab="agenda-proposals"');
+    expect(index.body).toContain('CORTEX V23');
+    expect(script.body).toContain('APPLIED: "Aplicado ao CORTEX"');
+    expect(script.body).toContain('"/apply"');
+    expect(script.body).toContain('Este é um comando real');
     expect(script.body).toContain('if(result?.conflictReport)');
     expect(script.body).toContain('Conflitos · somente leitura');
     expect(script.body).toContain('for(const note of agenda.warnings??[])');

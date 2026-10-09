@@ -122,3 +122,21 @@ As propostas preservam a duração real dos eventos Google. Para lembretes pontu
 O banco guarda título, horários original/sugerido, estado, identidade do usuário, data da decisão e validade. Cada proposta pendente vence após **15 minutos** e não pode mais ser aprovada ou rejeitada após o vencimento; gere uma nova consulta. Há limite de 50 propostas pendentes por usuário. Como há gravação de decisões, a V22 exige **PostgreSQL e CORTEX_API_TOKEN configurados**, mesmo em desenvolvimento. Mantenha a porta do Codespaces privada. Dados do Google armazenados nas propostas ficam no seu PostgreSQL; proteja o banco e os backups. Nenhum evento do Google é usado como instrução de IA.
 
 A conexão Google real ainda depende de configurar OAuth e autorizar sua conta. O teste automatizado do fluxo utiliza dados sintéticos e o PostgreSQL de testes; isso não valida acesso real ao Google.
+
+## V23 — Aplicação supervisionada de propostas aos lembretes CORTEX
+
+A partir da V23, um plano V22 **aprovado** e ainda válido pode ser **aplicado a um lembrete interno do CORTEX**, mediante uma **segunda confirmação explícita**. O Google Agenda permanece rigorosamente em modo somente leitura: planos para eventos Google continuam apenas orientativos.
+
+Fluxo: gere um conflito (V21), prepare uma proposta (V22), **aprove** o plano, abra **Propostas de agenda** e clique **Aplicar horário ao lembrete CORTEX**. Uma mensagem confirma que o horário real do lembrete será modificado no PostgreSQL. Se o servidor detectar que algo mudou, a aplicação é recusada com erro 409; faça nova análise.
+
+A API `POST /api/agenda/proposals/:id/apply` exige o mesmo Bearer `CORTEX_API_TOKEN` e corpo JSON **exato** `{"confirmed":true}`. O servidor não aceita novos horários nesse pedido. Os dados usados vêm do plano persistido, associado ao `CORTEX_USER_ID`, com os seguintes bloqueios:
+
+- apenas propostas com estado `APPROVED`, não utilizadas e com expiração futura (15 minutos após a criação);
+- somente `source="cortex"`, sem origem Google combinada ou recorrência projetada;
+- o lembrete original deve existir, pertencer ao usuário, manter mesmo título/instante e continuar `PENDING`; lembretes `DUE`, concluídos ou cancelados não são alterados;
+- a agenda unificada é consultada novamente: o Google precisa estar conectado, sem paginação parcial, o conflito original ainda deve existir e a sugestão recalculada deve coincidir com a proposta aprovada;
+- a alternativa precisa continuar no futuro e não pode coincidir com outro lembrete interno no mesmo intervalo de 30 minutos.
+
+A atualização do lembrete e a marcação `APPLIED` na proposta são executadas na **mesma transação PostgreSQL**, com compare-and-swap e trava de linha. Requisições concorrentes ou repetidas não podem aplicar o mesmo plano duas vezes. Um erro reverte a transação. O histórico da proposta armazena `appliedAt`, e o estado `APPLIED` é adicionado por migração automática da restrição de estados V22 ao iniciar o servidor.
+
+**Limitações:** não há desfazer automático, nem alteração de eventos Google, regras recorrentes ou convites externos. Revalidação de agenda é uma fotografia: um evento Google pode ser alterado externamente logo após a consulta; confirme os compromissos no Google. A criação de uma recorrência por outro worker também pode mudar a disponibilidade após a verificação. Dados do Google podem continuar no banco como parte do registro de proposta; proteja os backups. A conexão OAuth Google precisa ser ativada no Codespaces e o `CORTEX_API_TOKEN` deve estar configurado.
