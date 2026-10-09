@@ -20,3 +20,5 @@ V13: proposta de lembrete em linguagem natural PT-BR no NEURON Chat, com interpr
 V14: acompanhamento de lembretes vencidos na aba e notificações locais genéricas do navegador por adesão explícita, sem push offline ou dados pessoais em notificações.
 
 V15: agendamento persistente diário/semanal com pausa, retomada e cancelamento, ocorrências transacionais deduplicadas no PostgreSQL e prévias supervisionadas no NEURON Chat.
+
+V16: consulta da agenda pelo NEURON Chat e API autenticada, com janelas locais de hoje/amanhã/7 dias, leitura limitada e distinção explícita entre lembretes persistidos e recorrências previstas.

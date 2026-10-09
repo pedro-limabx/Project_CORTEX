@@ -68,3 +68,16 @@ Proteções: monitoramento e avisos são **desativados por padrão e não persis
 O worker Node.js salva cada ocorrência na tabela cortex_reminders com transações e um índice único em schedule_id/due_at. FOR UPDATE SKIP LOCKED impede réplicas de duplicarem uma execução. Após uma indisponibilidade prolongada, é criada no máximo uma ocorrência atrasada por regra, referente ao primeiro horário perdido, e o próximo horário avança para o futuro; isso evita inundar a caixa de entrada. Pausar impede futuras ocorrências; retomar salta horários passados; cancelar é irreversível e não apaga o histórico. Avisos já criados seguem disponíveis para concluir ou cancelar individualmente.
 
 Os horários são sempre calculados no fuso America/Sao_Paulo. Regras não enviam e-mails, SMS, WhatsApp, Web Push ou executam ferramentas. O Node.js e PostgreSQL precisam estar ativos para processamento pontual; o navegador deve ficar aberto para notificações locais da V14.
+
+
+## V16 — Consultas de agenda em linguagem natural (somente leitura)
+
+A rota autenticada `GET /api/agenda?period=today|tomorrow|week` consulta lembretes `PENDING`/`DUE` e prevê as próximas ocorrências de regras ativas, sem criar lembretes, alterar estados ou executar ferramentas. A janela de consulta é calculada a partir dos dias civis em `America/Sao_Paulo`, incluindo hoje, amanhã ou os próximos **7 dias corridos a partir de hoje**. Respeita o `CORTEX_USER_ID` definido pelo servidor. Sem PostgreSQL retorna 503.
+
+Comandos de chat reconhecidos incluem:
+- `Quais são meus lembretes de hoje?`
+- `O que tenho agendado amanhã?`
+- `Minha agenda da semana`
+- `Mostre minha agenda para os próximos 7 dias`
+
+O chat retorna `mode=agenda-readonly` e um objeto `agenda` com itens `saved` (registros persistidos) e `recurrence-preview` (projeções **ainda não gravadas**). A saída é limitada a 30 itens por consulta, com indicador `truncated` se a amostra foi reduzida. Consulta até 100 registros e 100 regras ativas para manter custos previsíveis. Filtros excluem lembretes concluídos e cancelados. Consultas não acionam a máquina de estados, e resultados podem refletir atraso do worker se ele estiver pausado. Uma pergunta fora dos padrões suportados segue o comportamento normal do NEURON. Isso não representa integração com calendários externos.

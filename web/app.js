@@ -1059,6 +1059,31 @@ $("#chat-form").addEventListener("submit", (event) => {
 });
 function renderChatInspection(result) {
   const target = clear($("#chat-inspect"));
+  if(result?.agenda){
+    const agenda=result.agenda;
+    target.append(node("span","status completed","Consulta somente leitura"));
+    target.append(headline("Agenda pessoal · São Paulo"));
+    textDetail(target,"Período",{
+      today:"Hoje",tomorrow:"Amanhã",week:"Próximos 7 dias"
+    }[agenda.period]||"—");
+    textDetail(target,"Consulta",
+      agenda.counts.saved+" lembrete(s) registrado(s) e "+
+      agenda.counts.projected+" ocorrência(s) prevista(s) nesta amostra");
+    if(!agenda.items.length)target.append(info("Nenhum lembrete encontrado para este período."));
+    for(const item of agenda.items){
+      const row=node("div","workflow-step");
+      row.append(node("strong","",item.title),
+        node("p","row-meta",dateTime(item.dueAt)+" · "+
+          (item.source==="recurrence-preview"?"Recorrência prevista (não criada)":
+            item.status==="DUE"?"Lembrete vencido":"Lembrete agendado")));
+      target.append(row);
+    }
+    if(agenda.truncated)target.append(info("A consulta foi limitada a 30 itens. Outros compromissos podem existir."));
+    target.append(makeButton("Ver meus lembretes ↗","btn-outline",()=>{
+      tab("reminders");
+    }));
+    return;
+  }
   if(result?.recurringProposal){
     const schedule=result.recurringProposal;
     target.append(headline("Prévia de lembrete recorrente"));
@@ -1181,6 +1206,21 @@ function askWorkflowStatus(id) {
 }
 
 $("#chat-workflow-status").addEventListener("click", () => askWorkflowStatus());
+$("#chat-agenda-today").addEventListener("click",()=>{
+  tab("chat");
+  if(chatSending){
+    showNotice("Aguarde a resposta atual do NEURON.");
+    return;
+  }
+  const input=$("#message");
+  if(input.value.trim()){
+    showNotice("Há um rascunho não enviado. Envie ou apague antes de consultar a agenda.");
+    input.focus();
+    return;
+  }
+  input.value="Quais são meus lembretes de hoje?";
+  void sendChatMessage();
+});
 
 // Workflows
 const presets = {

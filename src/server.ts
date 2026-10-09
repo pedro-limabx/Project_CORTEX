@@ -34,6 +34,7 @@ import { interpretReminder } from "./reminders/interpret.js";
 import { PostgresRecurrenceRepository } from "./reminders/recurrence-store.js";
 import { validateNewSchedule } from "./reminders/recurrence.js";
 import { interpretRecurringReminder } from "./reminders/recurrence-interpret.js";
+import { interpretAgendaQuestion, readAgenda, agendaAnswer } from "./reminders/agenda.js";
 import {
   InMemoryAlertAcknowledgementStore,
   PostgresAlertAcknowledgementStore,
@@ -476,6 +477,17 @@ app.post("/api/reminders/:id/:action", { preHandler: authenticate }, async (requ
     actionExecuted:false,approvalGranted:false};
 });
 
+// V16: owner-scoped, read-only agenda snapshot. No persistence or tool calls.
+app.get("/api/agenda",{preHandler:authenticate},async(request,reply)=>{
+  if(!reminderStore||!recurrenceStore)
+    return reply.code(503).send({error:"PostgreSQL is required for agenda queries"});
+  const period=(request.query as {period?:unknown}).period??"today";
+  if(period!=="today"&&period!=="tomorrow"&&period!=="week")
+    return reply.code(400).send({error:"period must be today, tomorrow or week"});
+  return readAgenda({reminders:reminderStore,recurrences:recurrenceStore},
+    config.CORTEX_USER_ID,period);
+});
+
 // V15: schedule CRUD. All actions authenticate and scope by CORTEX_USER_ID;
 // no schedule creation or modification happens without explicit POST.
 app.get("/api/reminder-schedules", {preHandler:authenticate},async (request,reply)=>{
@@ -635,6 +647,17 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
     return reply.code(400).send({ error: "message is required" });
   }
 
+  // Recognize explicit read-only questions before reminder creation proposals.
+  // This path only queries user-scoped PostgreSQL records and performs no writes.
+  const agendaPeriod=interpretAgendaQuestion(body.message.trim());
+  if(agendaPeriod){
+    if(!reminderStore||!recurrenceStore)
+      return reply.code(503).send({error:"PostgreSQL is required for agenda queries"});
+    const agenda=await readAgenda({reminders:reminderStore,recurrences:recurrenceStore},
+      config.CORTEX_USER_ID,agendaPeriod);
+    return {requestId:crypto.randomUUID(),mode:"agenda-readonly",
+      text:agendaAnswer(agenda),agenda,actionExecuted:false};
+  }
   // Limited deterministic command support. This only prepares a reminder;
   // it NEVER writes to PostgreSQL without the explicit UI confirmation.
   // Every other chat command continues through the existing NEURON pipeline.

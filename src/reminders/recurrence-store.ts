@@ -71,6 +71,13 @@ export class PostgresRecurrenceRepository {
     ].join(" "),[user,limit]);
     return result.rows.map(mapped);
   }
+  async listActive(user:string,limit:number):Promise<RecurringSchedule[]> {
+    const result=await this.pool.query<DbRow>([
+      "SELECT",fields,"FROM cortex_reminder_schedules",
+      "WHERE user_id=$1 AND status='ACTIVE' ORDER BY next_due_at ASC,id ASC LIMIT $2"
+    ].join(" "),[user,limit]);
+    return result.rows.map(mapped);
+  }
   async get(user:string,id:string):Promise<RecurringSchedule|null>{
     const result=await this.pool.query<DbRow>(
       "SELECT "+fields+" FROM cortex_reminder_schedules WHERE user_id=$1 AND id=$2::uuid",[user,id]);
