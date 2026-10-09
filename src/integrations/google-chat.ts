@@ -1,7 +1,9 @@
 // V19: deterministic, explicit calendar-read intent. Never calls an LLM,
 // schedules reminders, or changes events on Google Calendar.
 import type {AgendaPeriod} from "../reminders/agenda.js";
-import type {GoogleEventsSnapshot,GoogleEvent} from "./google-calendar.js";
+import type {
+  GoogleCalendarReadOnly,GoogleEventsSnapshot,GoogleEvent
+} from "./google-calendar.js";
 
 const prefix=/^(?:neuron\s*[,!]\s*)?(?:quais(?: sao)? (?:as )?(?:minhas )?reunioes(?: tenho)?|quais(?: sao)? (?:os )?(?:meus )?(?:eventos|compromissos) (?:tenho )?(?:do |no )?google(?: agenda| calendar)?|(?:(?:me )?mostre|listar|consulte|consultar|ver) (?:as )?(?:minhas )?reunioes|(?:(?:me )?mostre|listar|consulte|consultar|ver) (?:os )?(?:meus )?(?:eventos|compromissos) (?:do |no )?google(?: agenda| calendar)?|o que (?:tenho|esta agendado) (?:no |na )(?:meu |minha )?google(?: agenda| calendar)?|(?:minha agenda|meus eventos|meus compromissos|minhas reunioes) (?:no |na |do |da )google(?: agenda| calendar)?)\b/u;
 const periods:Record<string,AgendaPeriod>={
@@ -43,6 +45,38 @@ function formattedEvent(event:GoogleEvent):string {
     }).format(at):"Horário indisponível";
   return date+" — "+label;
 }
+export type GoogleCalendarChatResult=
+  |{mode:"google-calendar-help";text:string;googleCalendarHelp:{
+      reason:"not-configured"|"not-connected"|"unsupported-period";
+      configured?:boolean;connected?:boolean
+    };actionExecuted:false;readOnly:true}
+  |{mode:"google-calendar-readonly";text:string;googleAgenda:GoogleEventsSnapshot;
+    actionExecuted:false;readOnly:true};
+
+// Dependency injection enables a test to verify that no remote read occurs
+// when OAuth is disabled/unconnected, and that the owner is server-controlled.
+export async function queryGoogleCalendarForChat(
+  service:Pick<GoogleCalendarReadOnly,"status"|"listEvents">|undefined,
+  user:string,
+  query:Exclude<GoogleQuestion,null>
+):Promise<GoogleCalendarChatResult>{
+  if(query==="unsupported")return {mode:"google-calendar-help",
+    text:"Ainda reconheço apenas consultas ao Google Agenda para hoje, amanhã ou os próximos 7 dias. Reformule a pergunta, por exemplo: 'Quais reuniões tenho amanhã?'",
+    googleCalendarHelp:{reason:"unsupported-period"},actionExecuted:false,readOnly:true};
+  if(!service)return {mode:"google-calendar-help",
+    text:"A integração com Google Agenda ainda não foi configurada. Configure OAuth na aba Google Agenda e depois conecte sua conta.",
+    googleCalendarHelp:{reason:"not-configured",configured:false,connected:false},
+    actionExecuted:false,readOnly:true};
+  const connection=await service.status(user);
+  if(!connection.connected)return {mode:"google-calendar-help",
+    text:"Sua conta Google Agenda ainda não está conectada. Abra a aba Google Agenda, autorize a conexão e repita a consulta.",
+    googleCalendarHelp:{reason:"not-connected",configured:true,connected:false},
+    actionExecuted:false,readOnly:true};
+  const googleAgenda=await service.listEvents(user,query);
+  return {mode:"google-calendar-readonly",text:googleCalendarChatAnswer(googleAgenda),
+    googleAgenda,actionExecuted:false,readOnly:true};
+}
+
 export function googleCalendarChatAnswer(snapshot:GoogleEventsSnapshot):string {
   const intro="Eventos do calendário principal do Google para "+
     ptPeriod[snapshot.period]+" (horário de São Paulo).";

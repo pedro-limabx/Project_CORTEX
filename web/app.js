@@ -1182,7 +1182,7 @@ function renderChatInspection(result) {
     textDetail(target,"Período",{
       today:"Hoje",tomorrow:"Amanhã",week:"Próximos 7 dias"
     }[agenda.period]||"—");
-    textDetail(target,"Origem","Google Agenda (externo) · não são lembtes internos do CORTEX".replace("lembtes","lembretes"));
+    textDetail(target,"Origem","Google Agenda (externo) · não são lembretes internos do CORTEX");
     if(!agenda.events.length)target.append(info("O Google não retornou eventos neste período."));
     for(const event of agenda.events){
       const entry=node("div","workflow-step");

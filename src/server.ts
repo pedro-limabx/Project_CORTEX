@@ -36,7 +36,7 @@ import { validateNewSchedule } from "./reminders/recurrence.js";
 import { interpretRecurringReminder } from "./reminders/recurrence-interpret.js";
 import { interpretAgendaQuestion, readAgenda, agendaAnswer } from "./reminders/agenda.js";
 import { exportAgendaIcs, CalendarExportTooLargeError } from "./reminders/ical.js";
-import { interpretGoogleCalendarQuestion, googleCalendarChatAnswer } from "./integrations/google-chat.js";
+import { interpretGoogleCalendarQuestion, queryGoogleCalendarForChat } from "./integrations/google-chat.js";
 import {
   GoogleCalendarReadOnly, GoogleCalendarAuthError, GoogleCalendarRemoteError
 } from "./integrations/google-calendar.js";
@@ -758,31 +758,11 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
   // The provider has only Google's calendar.events.readonly OAuth scope.
   const googlePeriod=interpretGoogleCalendarQuestion(body.message.trim());
   if(googlePeriod){
-    if(googlePeriod==="unsupported"){
-      return {requestId:crypto.randomUUID(),mode:"google-calendar-help",
-        text:"Ainda reconheço apenas consultas ao Google Agenda para hoje, amanhã ou os próximos 7 dias. Reformule a pergunta, por exemplo: 'Quais reuniões tenho amanhã?'",
-        googleCalendarHelp:{reason:"unsupported-period"},actionExecuted:false,readOnly:true};
-    }
-    if(!googleCalendar){
-      return {requestId:crypto.randomUUID(),mode:"google-calendar-help",
-        text:"A integração com Google Agenda ainda não foi configurada. Configure OAuth na aba Google Agenda e depois conecte sua conta.",
-        googleCalendarHelp:{reason:"not-configured",configured:false,connected:false},
-        actionExecuted:false,readOnly:true};
-    }
-    const status=await googleCalendar.status(config.CORTEX_USER_ID);
-    if(!status.connected){
-      return {requestId:crypto.randomUUID(),mode:"google-calendar-help",
-        text:"Sua conta Google Agenda ainda não está conectada. Abra a aba Google Agenda, autorize a conexão e repita a consulta.",
-        googleCalendarHelp:{reason:"not-connected",configured:true,connected:false},
-        actionExecuted:false,readOnly:true};
-    }
     try{
-      const googleAgenda=await googleCalendar.listEvents(config.CORTEX_USER_ID,googlePeriod);
-      return reply.header("Cache-Control","private, no-store").send({
-        requestId:crypto.randomUUID(),mode:"google-calendar-readonly",
-        text:googleCalendarChatAnswer(googleAgenda),googleAgenda,
-        actionExecuted:false,readOnly:true
-      });
+      const result=await queryGoogleCalendarForChat(
+        googleCalendar,config.CORTEX_USER_ID,googlePeriod);
+      return reply.header("Cache-Control","private, no-store")
+        .send({requestId:crypto.randomUUID(),...result});
     }catch(error){
       if(error instanceof GoogleCalendarAuthError)
         return reply.code(401).send({error:"Não foi possível autenticar no Google Agenda. Reconecte sua conta na aba Google Agenda."});
