@@ -52,9 +52,10 @@ function localDate(item:UnifiedItem):string {
   const date=new Date(item.start);
   // Sorting by local civil date first, with all-day entries at the beginning of
   // that day. Time entries are ordered by absolute UTC within the civil day.
-  return new Intl.DateTimeFormat("en-CA",{
+  const parts=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{
     timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"
-  }).format(date);
+  }).formatToParts(date).filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+  return parts.year+"-"+parts.month+"-"+parts.day;
 }
 function order(a:UnifiedItem,b:UnifiedItem):number {
   const day=localDate(a).localeCompare(localDate(b));
