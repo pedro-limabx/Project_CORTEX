@@ -39,7 +39,12 @@ export class PostgresReminderRepository implements ReminderRepository {
   constructor(private readonly pool: Pool) {}
 
   async initialize(): Promise<void> {
-    await this.pool.query([
+    // Serialize DDL across parallel test pools and process instances.
+    const client=await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(8142, 1518)");
+    await client.query([
       "CREATE TABLE IF NOT EXISTS cortex_reminders (",
       "id UUID PRIMARY KEY, user_id TEXT NOT NULL,",
       "title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 160),",
@@ -48,14 +53,21 @@ export class PostgresReminderRepository implements ReminderRepository {
       "due_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL,",
       "triggered_at TIMESTAMPTZ, completed_at TIMESTAMPTZ, cancelled_at TIMESTAMPTZ)"
     ].join(" "));
-    await this.pool.query([
+    await client.query([
       "CREATE INDEX IF NOT EXISTS cortex_reminders_due",
       "ON cortex_reminders (user_id, due_at, id) WHERE status='PENDING'"
     ].join(" "));
-    await this.pool.query([
+    await client.query([
       "CREATE INDEX IF NOT EXISTS cortex_reminders_inbox",
       "ON cortex_reminders (user_id, due_at DESC, id)"
     ].join(" "));
+      await client.query("COMMIT");
+    } catch(error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async create(user: string, title: string, dueAt: string, createdAt: string): Promise<Reminder> {

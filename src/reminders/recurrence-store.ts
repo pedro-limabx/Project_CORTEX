@@ -25,7 +25,12 @@ function mapped(r:DbRow):RecurringSchedule {
 export class PostgresRecurrenceRepository {
   constructor(private readonly pool:Pool){}
   async initialize():Promise<void>{
-    await this.pool.query([
+    // Serialize DDL across parallel test pools and process instances.
+    const client=await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(8142, 1518)");
+    await client.query([
       "CREATE TABLE IF NOT EXISTS cortex_reminder_schedules (",
       "id UUID PRIMARY KEY,user_id TEXT NOT NULL,title TEXT NOT NULL",
       "CHECK (char_length(title) BETWEEN 1 AND 160),",
@@ -39,18 +44,25 @@ export class PostgresRecurrenceRepository {
       "CONSTRAINT cortex_reminder_schedule_weekday CHECK (",
       "(frequency='DAILY' AND weekday IS NULL) OR (frequency='WEEKLY' AND weekday IS NOT NULL)))"
     ].join(" "));
-    await this.pool.query([
+    await client.query([
       "ALTER TABLE cortex_reminders ADD COLUMN IF NOT EXISTS",
       "schedule_id UUID REFERENCES cortex_reminder_schedules(id)"
     ].join(" "));
-    await this.pool.query([
+    await client.query([
       "CREATE UNIQUE INDEX IF NOT EXISTS cortex_reminder_schedule_occurrence",
       "ON cortex_reminders (schedule_id,due_at) WHERE schedule_id IS NOT NULL"
     ].join(" "));
-    await this.pool.query([
+    await client.query([
       "CREATE INDEX IF NOT EXISTS cortex_reminder_schedules_due",
       "ON cortex_reminder_schedules (user_id,next_due_at,id) WHERE status='ACTIVE'"
     ].join(" "));
+      await client.query("COMMIT");
+    } catch(error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
   async create(user:string,input:NewSchedule,at:string):Promise<RecurringSchedule>{
     const result=await this.pool.query<DbRow>([
