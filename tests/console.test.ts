@@ -64,6 +64,8 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain('async function loadRecurringSchedules()');
     expect(script.body).toContain('api("/api/reminder-schedules"');
     expect(script.body).toContain('if(result?.recurringProposal)');
+    expect(script.body).toContain('if(result?.agenda)');
+    expect(index.body).toContain('id="chat-agenda-today"');
     expect(script.body).toContain('if (result?.reminderProposal)');
     expect(script.body).toContain('Confirmar e agendar');
     expect(script.body).toContain('api("/api/workflows/propose"');
@@ -235,6 +237,35 @@ describe("CORTEX web console", () => {
     expect(chat.textarea.value).toBe("Calcule 25*18");
     expect(chat.messages).not.toHaveBeenCalled();
     expect(chat.button.disabled).toBe(false);
+  });
+
+
+  it("uses the agenda quick action only on click and preserves chat drafts", async () => {
+    const source = await readFile(resolve(process.cwd(), "web/app.js"), "utf8");
+    const start = source.indexOf('$("#chat-agenda-today").addEventListener("click"');
+    const end = source.indexOf("// Quick status questions", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const input = {value:"",focus:vi.fn()};
+    const sendChatMessage=vi.fn(),showNotice=vi.fn(),tab=vi.fn();
+    let clickHandler:(()=>void)|undefined;
+    const button={addEventListener:(_type:string,fn:()=>void)=>{clickHandler=fn;}};
+    runInNewContext(source.slice(start,end),{
+      $:(selector:string)=>selector==="#message"?input:button,
+      chatSending:false,sendChatMessage,showNotice,tab
+    });
+    expect(clickHandler).toBeDefined();
+    expect(sendChatMessage).not.toHaveBeenCalled();
+    clickHandler?.();
+    expect(tab).toHaveBeenCalledWith("chat");
+    expect(input.value).toBe("Quais são meus lembretes de hoje?");
+    expect(sendChatMessage).toHaveBeenCalledOnce();
+    input.value="rascunho não enviado";
+    clickHandler?.();
+    expect(input.value).toBe("rascunho não enviado");
+    expect(input.focus).toHaveBeenCalledOnce();
+    expect(sendChatMessage).toHaveBeenCalledOnce();
+    expect(showNotice).toHaveBeenCalledWith(expect.stringContaining("rascunho"));
   });
 
   it("requests workflow summaries only on click and preserves unfinished chat drafts", async () => {

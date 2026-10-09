@@ -16,6 +16,7 @@ export interface ReminderRepository {
   transition(user: string, id: string, target: "DONE" | "CANCELLED", at: string): Promise<boolean>;
   markDue(user: string, at: string, limit: number): Promise<number>;
   dueCount(user: string): Promise<number>;
+  listWindow(user:string,from:string,until:string,limit:number):Promise<Reminder[]>;
 }
 
 type Row = {
@@ -74,6 +75,16 @@ export class PostgresReminderRepository implements ReminderRepository {
       "ORDER BY CASE WHEN status='DUE' THEN 0 WHEN status='PENDING' THEN 1 ELSE 2 END,",
       "due_at ASC, id ASC LIMIT $3"
     ].join(" "), [user, view, limit]);
+    return result.rows.map(map);
+  }
+
+  async listWindow(user:string,from:string,until:string,limit:number):Promise<Reminder[]> {
+    const result=await this.pool.query<Row>([
+      "SELECT",FIELDS,"FROM cortex_reminders",
+      "WHERE user_id=$1 AND status IN ('PENDING','DUE')",
+      "AND due_at >= $2::timestamptz AND due_at < $3::timestamptz",
+      "ORDER BY due_at ASC,id ASC LIMIT $4"
+    ].join(" "),[user,from,until,limit]);
     return result.rows.map(map);
   }
 
