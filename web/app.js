@@ -752,12 +752,128 @@ $("#backend-notice-refresh").addEventListener("click", event =>
   action(loadBackendCenter, event.currentTarget));
 $("#backend-notice-view").addEventListener("change", () => void action(loadBackendCenter));
 
+// CORTEX V14: opt-in browser watch. The durable scheduler remains on the server.
+let reminderWatchTimer = null;
+let browserRemindersEnabled = false;
+let reminderWatchStartedAt = 0;
+let reminderWatchSeen = new Set();
+let reminderWatchInFlight = false;
+
+function updateReminderBadge(count) {
+  const badge = $("#nav-reminder-count");
+  badge.textContent = String(count);
+  badge.hidden = count === 0;
+}
+function selectNewDueReminders(reminders, seen, startedAt) {
+  const fresh = [];
+  for (const reminder of reminders) {
+    if (reminder?.status !== "DUE" || typeof reminder.id !== "string" || !reminder.id
+        || seen.has(reminder.id)) continue;
+    seen.add(reminder.id);
+    // Never notify a backlog just because the user enabled monitoring.
+    const at = Date.parse(reminder.triggeredAt || "");
+    if (Number.isFinite(at) && at >= startedAt) fresh.push(reminder);
+  }
+  return fresh;
+}
+function updateReminderWatchControls() {
+  const active = reminderWatchTimer !== null;
+  $("#reminder-watch-toggle").textContent = active ? "■ Desativar acompanhamento" : "▶ Ativar acompanhamento";
+  $("#reminder-watch-toggle").setAttribute("aria-pressed",String(active));
+  $("#reminder-browser-toggle").textContent = browserRemindersEnabled
+    ? "🔕 Desativar avisos do navegador" : "🔔 Ativar avisos do navegador";
+  $("#reminder-browser-toggle").setAttribute("aria-pressed",String(browserRemindersEnabled));
+  $("#reminder-watch-status").textContent = !active
+    ? "Acompanhamento desativado. Nenhum aviso do navegador será emitido."
+    : "Verificação a cada 30 segundos nesta aba · Avisos do navegador "
+      + (browserRemindersEnabled ? "ativados" : "desativados") + " · sem notificações push.";
+}
+function notifyNewDueReminders(reminders) {
+  if (!reminders.length || !browserRemindersEnabled || reminderWatchTimer === null
+      || !("Notification" in window) || window.Notification.permission !== "granted") return;
+  try {
+    // Never put the private reminder title/description in OS notifications.
+    const notification = new window.Notification("CORTEX — Lembrete vencido", {
+      body: reminders.length === 1
+        ? "Você tem um lembrete para consultar no painel."
+        : "Você tem " + reminders.length + " lembretes novos para consultar no painel.",
+      tag:"cortex-reminders",silent:true
+    });
+    notification.onclick = () => {
+      window.focus();
+      tab("reminders");
+      notification.close();
+    };
+  } catch {
+    // Browser notifications may be blocked by OS/site policy; UI stays usable.
+  }
+}
+async function pollDueReminders() {
+  if (reminderWatchTimer === null || reminderWatchInFlight) return;
+  reminderWatchInFlight = true;
+  try {
+    const snapshot = await api("/api/reminders?view=due&limit=100");
+    if (reminderWatchTimer === null) return;
+    updateReminderBadge(snapshot.due);
+    const fresh = selectNewDueReminders(snapshot.reminders,reminderWatchSeen,reminderWatchStartedAt);
+    if (!fresh.length) return;
+    $("#reminder-watch-status").textContent = fresh.length
+      + " novo(s) lembrete(s) vencido(s). Consulte a agenda para visualizar.";
+    notifyNewDueReminders(fresh);
+  } finally {
+    reminderWatchInFlight = false;
+  }
+}
+$("#reminder-watch-toggle").addEventListener("click",event=>action(async()=>{
+  if (reminderWatchTimer !== null) {
+    window.clearInterval(reminderWatchTimer);
+    reminderWatchTimer = null;
+    reminderWatchSeen.clear();
+    updateReminderWatchControls();
+    return;
+  }
+  const snapshot = await api("/api/reminders?view=due&limit=100");
+  reminderWatchSeen = new Set(snapshot.reminders
+    .filter(x=>x.status==="DUE" && typeof x.id==="string").map(x=>x.id));
+  reminderWatchStartedAt = Date.now();
+  updateReminderBadge(snapshot.due);
+  reminderWatchTimer = window.setInterval(()=>{
+    void pollDueReminders().catch(error=>{
+      $("#reminder-watch-status").textContent = "Falha na consulta: "
+        + (error instanceof Error ? error.message : "erro desconhecido");
+    });
+  },30000);
+  updateReminderWatchControls();
+},event.currentTarget));
+$("#reminder-browser-toggle").addEventListener("click",event=>action(async()=>{
+  if (browserRemindersEnabled) {
+    browserRemindersEnabled = false;
+    updateReminderWatchControls();
+    return;
+  }
+  if (!("Notification" in window) || !window.isSecureContext) {
+    showNotice("Avisos do navegador exigem um navegador compatível e contexto seguro (HTTPS ou localhost).","error");
+    return;
+  }
+  // Permission only from a user click, never from startup/background polling.
+  const permission = await window.Notification.requestPermission();
+  if (permission !== "granted") {
+    showNotice("O navegador não autorizou avisos. Os lembretes continuam disponíveis no painel.");
+    return;
+  }
+  browserRemindersEnabled = true;
+  updateReminderWatchControls();
+  showNotice("Avisos autorizados nesta aba. Ative o acompanhamento para recebê-los.","success");
+},event.currentTarget));
+updateReminderWatchControls();
+
 // CORTEX V12: explicitly scheduled one-time reminders, no browser timer required.
 async function loadReminders() {
   const view = $("#reminder-view").value;
   const response = await api("/api/reminders?view=" + encodeURIComponent(view) + "&limit=100");
   const target = clear($("#reminder-list"));
   $("#reminder-due-count").textContent = String(response.due) + " vencido(s)";
+  updateReminderBadge(response.due);
   $("#reminder-status").textContent = "Avisos somente no painel · " +
     response.reminders.length + " lembrete(s) nesta seleção.";
   if (!response.reminders.length) {

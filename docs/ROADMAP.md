@@ -16,3 +16,5 @@ Every phase follows: analyze → implement → test → security review → docu
 CORTEX V12: lembretes pessoais únicos persistidos, triagem dos vencidos no backend, confirmação/cancelamento manual e painel dedicado. Integração com o chat e recorrência permanecem evoluções futuras.
 
 V13: proposta de lembrete em linguagem natural PT-BR no NEURON Chat, com interpretação determinística, fuso São Paulo explícito e confirmação separada antes de persistir.
+
+V14: acompanhamento de lembretes vencidos na aba e notificações locais genéricas do navegador por adesão explícita, sem push offline ou dados pessoais em notificações.

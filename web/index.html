@@ -37,7 +37,7 @@
       <button class="nav-button active" data-tab="overview">◈ <span>Visão geral</span></button>
       <button class="nav-button" data-tab="monitoring">▥ <span>Monitoramento</span></button>
       <button class="nav-button" data-tab="alerts">◉ <span>Alertas</span> <span class="nav-alert-count" id="nav-alert-count" aria-label="Alertas não vistos" hidden></span></button>
-       <button class="nav-button" data-tab="reminders">◷ <span>Lembretes</span></button>
+       <button class="nav-button" data-tab="reminders">◷ <span>Lembretes</span><span class="nav-reminder-count" id="nav-reminder-count" aria-label="Lembretes vencidos" hidden></span></button>
       <button class="nav-button" data-tab="chat">✦ <span>NEURON Chat</span></button>
       <button class="nav-button" data-tab="workflows">⬡ <span>Workflows v2</span></button>
       <button class="nav-button" data-tab="tasks">▤ <span>Tarefas</span></button>
@@ -258,7 +258,7 @@
               <p class="hint">Use a hora local do dispositivo. Aceita agendamentos entre 1 minuto e 2 anos no futuro.</p>
               <div class="actions"><button type="submit" class="btn btn-primary">+ Criar lembrete</button></div>
             </form>
-            <div class="tip">Notificações apenas nesta interface. Não há e-mail, WhatsApp, SMS ou push. Sem servidor Node.js/PostgreSQL ativo, a identificação do vencimento fica suspensa até o retorno.</div>
+            <div class="tip">Avisos no navegador só enquanto esta página estiver aberta e com acompanhamento ativado. Não há push com navegador fechado, e-mail, WhatsApp nem SMS. O servidor Node.js/PostgreSQL precisa estar ativo para marcar os lembretes vencidos.</div>
           </article>
           <article class="card">
             <div class="card-head"><h2>Agenda persistente</h2><span id="reminder-due-count" class="notification-counter">—</span></div>
@@ -271,6 +271,11 @@
                 <option value="cancelled">Cancelados</option>
               </select>
             </label>
+            <div class="reminder-watch-controls">
+              <button id="reminder-watch-toggle" class="btn btn-outline small" type="button" aria-pressed="false">▶ Ativar acompanhamento</button>
+              <button id="reminder-browser-toggle" class="btn btn-ghost small" type="button" aria-pressed="false">🔔 Ativar avisos do navegador</button>
+              <p id="reminder-watch-status" class="hint" role="status" aria-live="polite">Acompanhamento desativado. Ative para verificar novos vencimentos a cada 30 segundos.</p>
+            </div>
             <p id="reminder-status" class="hint" role="status" aria-live="polite">Aguardando consulta ao servidor...</p>
             <div id="reminder-list" class="reminder-list" aria-live="polite"></div>
           </article>
