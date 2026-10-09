@@ -99,3 +99,26 @@ Até quatro **sugestões tentativas de 30 minutos** entre 9h e 18h, no horário 
 
 A análise não envia dados de eventos para um LLM nem autoriza reagendamento, exclusão, criação, notificação automática ou sincronização. OAuth segue com escopo apenas de leitura. Sem PostgreSQL retorna HTTP 503. Sem Google conectado, consulta só o CORTEX e avisa a limitação.
 
+
+## V22 — Propostas supervisionadas de reorganização (sem edição automática)
+
+A V22 converte conflitos detectados na V21 em **propostas de reorganização que dependem de revisão humana**, com registro persistente das decisões no PostgreSQL.
+
+1. No NEURON Chat, pergunte: `Tenho conflitos na agenda amanhã?`.
+2. Nos resultados, escolha **Preparar plano** para o compromisso específico. O CORTEX consulta a agenda novamente e verifica o conflito; se tiver mudado ou se a consulta estiver incompleta, recusa a geração em vez de prosseguir com dados obsoletos.
+3. Abra **Propostas de agenda** para comparar horário original e alternativa, com indicação da fonte CORTEX/Google.
+4. Escolha **Aprovar plano** ou **Rejeitar**. Uma confirmação explícita é obrigatória.
+
+**Aprovação não é execução:** aprovar significa concordar com a proposta registrada para revisão futura. Não altera o Google Agenda nem o horário de qualquer lembrete CORTEX. Para aplicar a alteração, o usuário ainda precisa fazê-la manualmente no sistema correspondente. Esta limitação é intencional: OAuth V18 continua com `calendar.events.readonly`. Não há novas permissões de escrita nem operações externas ocultas.
+
+As propostas preservam a duração real dos eventos Google. Para lembretes pontuais, o novo horário permanece **pontual**, sem inventar término; o cálculo apenas reserva uma margem hipotética de 30 minutos ao procurar alternativas. Os horários tentativos são pesquisados na **mesma data**, em passos de 30 minutos entre 9h e 18h em `America/Sao_Paulo`, evitando intervalos já conhecidos como ocupados e instantes com lembretes. Não há garantia de disponibilidade. Eventos de dia inteiro, eventos com duração desconhecida, fontes Google desconectadas, agendas truncadas, conflitos obsoletos ou recorrências ainda não materializadas impedem a criação automática de um plano seguro.
+
+**API autenticada e armazenamento:**
+
+- `GET /api/agenda/proposals?limit=30`: lista somente os planos associados ao usuário controlado pelo servidor.
+- `POST /api/agenda/proposals`: JSON `{"period":"tomorrow","conflictKey":"<32 caracteres hex>","targetId":"<ID da análise>","confirmed":true}`. Recalcula o conflito e escolhe a alternativa exclusivamente no backend; não aceita horários ou títulos fornecidos pelo navegador.
+- `POST /api/agenda/proposals/:id/approve` ou `/:id/reject`: JSON exato `{"confirmed":true}`. Transição atômica de `PENDING_REVIEW` para `APPROVED` ou `REJECTED`, sem duplicidade e sem alteração de compromissos.
+
+O banco guarda título, horários original/sugerido, estado, identidade do usuário, data da decisão e validade. Cada proposta pendente vence após **15 minutos** e não pode mais ser aprovada ou rejeitada após o vencimento; gere uma nova consulta. Há limite de 50 propostas pendentes por usuário. Como há gravação de decisões, a V22 exige **PostgreSQL e CORTEX_API_TOKEN configurados**, mesmo em desenvolvimento. Mantenha a porta do Codespaces privada. Dados do Google armazenados nas propostas ficam no seu PostgreSQL; proteja o banco e os backups. Nenhum evento do Google é usado como instrução de IA.
+
+A conexão Google real ainda depende de configurar OAuth e autorizar sua conta. O teste automatizado do fluxo utiliza dados sintéticos e o PostgreSQL de testes; isso não valida acesso real ao Google.

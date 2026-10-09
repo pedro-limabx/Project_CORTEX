@@ -90,7 +90,11 @@ const statusLabels = {
   ACTIVE: "Ativo",
   SKIPPED: "Ignorada",
   RUNNING: "Executando",
-  PLANNED: "Planejado"
+  PLANNED: "Planejado",
+  PENDING_REVIEW: "Aguardando revisão",
+  APPROVED: "Plano aprovado",
+  REJECTED: "Plano rejeitado",
+  EXPIRED: "Expirado"
 };
 
 function node(tag, className = "", text = "") {
@@ -183,7 +187,7 @@ async function action(operation, button = null) {
 function tab(name) {
   const labels = {
     overview: "Visão geral", monitoring: "Monitoramento", alerts: "Alertas", reminders: "Lembretes", "google-calendar":"Google Agenda", chat: "NEURON Chat",
-    workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
+    "agenda-proposals":"Propostas de agenda",workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
   };
   if (!labels[name]) return;
   $$("[data-panel]").forEach(panel => { panel.hidden = panel.dataset.panel !== name; });
@@ -194,6 +198,7 @@ function tab(name) {
   if (name === "alerts") action(loadAlertCenter);
   if (name === "reminders") action(loadReminders);
   if (name === "google-calendar") action(loadGoogleCalendarStatus);
+  if (name === "agenda-proposals") action(loadAgendaProposals);
   if (name === "workflows") action(loadWorkflows);
   if (name === "tasks") action(loadTasks);
   if (name === "tools") action(loadTools);
@@ -828,6 +833,63 @@ $("#google-calendar-disconnect").addEventListener("click",event=>action(async()=
   showNotice("Tokens Google locais removidos. Revogue também o consentimento no Google, se desejar.","success");
 },event.currentTarget));
 
+// V22: local plan decisions. No Google event changes are performed here.
+async function loadAgendaProposals(){
+  const response=await api("/api/agenda/proposals?limit=50");
+  const list=clear($("#agenda-proposals-list"));
+  $("#agenda-proposals-status").textContent=response.proposals.length+
+    " proposta(s) · nenhuma mudança externa aplicada.";
+  if(!response.proposals.length){
+    list.append(info("Nenhuma proposta ainda. Analise conflitos no NEURON Chat."));
+    return;
+  }
+  for(const plan of response.proposals){
+    const entry=node("article","recurrence-item");
+    const head=node("div","row-head");
+    head.append(node("strong","",plan.title),
+      statusPill(plan.expired?"EXPIRED":plan.status));
+    entry.append(head);
+    entry.append(node("p","row-meta","Origem: "+
+      (plan.source==="google"?"Google Agenda":"CORTEX")+
+      " · plano para revisão"));
+    entry.append(node("p","row-meta","Original: "+dateTime(plan.originalStart)+
+      (plan.originalEnd?" a "+dateTime(plan.originalEnd):" · pontual")));
+    entry.append(node("p","row-meta","Alternativa: "+dateTime(plan.proposedStart)+
+      (plan.proposedEnd?" a "+dateTime(plan.proposedEnd):" · pontual")));
+    entry.append(node("p","hint","Validade: "+dateTime(plan.expiresAt)+
+      " · não altera compromissos"));
+    const actions=node("div","actions");
+    if(plan.status==="PENDING_REVIEW"&&!plan.expired){
+      for(const [label,decision] of [["Aprovar plano","approve"],["Rejeitar","reject"]]){
+        actions.append(makeButton(label,"btn-outline small",async()=>{
+          const prompt=decision==="approve"
+            ?"Confirmar APROVAÇÃO apenas da proposta? Não moveremos eventos ou lembretes."
+            :"Confirmar REJEIÇÃO desta proposta?";
+          if(!window.confirm(prompt))return;
+          await api("/api/agenda/proposals/"+encodeURIComponent(plan.id)+
+            "/"+decision,{method:"POST",body:{confirmed:true}});
+          await loadAgendaProposals();
+          showNotice("Decisão registrada. Nenhum compromisso foi alterado.","success");
+        }));
+      }
+    }
+    entry.append(actions);
+    list.append(entry);
+  }
+}
+$("#refresh-agenda-proposals").addEventListener("click",event=>action(
+  loadAgendaProposals,event.currentTarget));
+async function prepareAgendaProposal(period,conflictKey,targetId){
+  if(!window.confirm("Criar proposta local para esse compromisso? "+
+    "O NEURON consultará a agenda novamente e NÃO alterará eventos ou lembretes."))return;
+  const response=await api("/api/agenda/proposals",{method:"POST",body:{
+    period,conflictKey,targetId,confirmed:true
+  }});
+  await loadAgendaProposals();
+  tab("agenda-proposals");
+  showNotice("Proposta "+response.proposal.id+" registrada para revisão.","success");
+}
+
 // V21 shortcut: send only after click, and never overwrite an unfinished draft.
 $("#chat-conflicts-tomorrow").addEventListener("click",()=>{
   tab("chat");
@@ -1225,6 +1287,13 @@ function renderChatInspection(result) {
         node("p","row-meta",dateTime(item.at)+" · "+
           (item.severity==="confirmed"?"Sobreposição de eventos":"Possível conflito pontual")),
         node("p","hint",item.explanation));
+      if(report.google==="connected"&&!report.truncated&&item.key){
+        for(const subject of [item.first,item.second]){
+          entry.append(makeButton("Preparar plano: "+subject.title,
+            "btn-outline small",()=>prepareAgendaProposal(
+              report.period,item.key,subject.id)));
+        }
+      }
       target.append(entry);
     }
     if(report.suggestions.length){

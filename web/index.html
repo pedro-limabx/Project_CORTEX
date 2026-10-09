@@ -39,6 +39,7 @@
       <button class="nav-button" data-tab="alerts">◉ <span>Alertas</span> <span class="nav-alert-count" id="nav-alert-count" aria-label="Alertas não vistos" hidden></span></button>
        <button class="nav-button" data-tab="reminders">◷ <span>Lembretes</span><span class="nav-reminder-count" id="nav-reminder-count" aria-label="Lembretes vencidos" hidden></span></button>
       <button class="nav-button" data-tab="google-calendar">▦ <span>Google Agenda</span></button>
+      <button class="nav-button" data-tab="agenda-proposals">◇ <span>Propostas de agenda</span></button>
       <button class="nav-button" data-tab="chat">✦ <span>NEURON Chat</span></button>
       <button class="nav-button" data-tab="workflows">⬡ <span>Workflows v2</span></button>
       <button class="nav-button" data-tab="tasks">▤ <span>Tarefas</span></button>
@@ -352,6 +353,21 @@
           <p id="google-calendar-event-status" class="hint" role="status" aria-live="polite">Nenhum evento consultado.</p>
           <div id="google-calendar-event-list" class="resource-list"></div>
           <p class="hint">Eventos do calendário principal do Google não são salvos como lembretes no CORTEX. Até 50 eventos por consulta; resultados adicionais são sinalizados.</p>
+        </article>
+      </section>
+
+      <section class="panel" data-panel="agenda-proposals" hidden>
+        <div class="page-heading">
+          <div><div class="eyebrow">PERSONAL ASSISTANCE / CORTEX V22</div>
+            <h1>Propostas de <span>agenda.</span></h1>
+            <p>Revise sugestões geradas a partir de conflitos reais. Aprovar é registrar sua preferência, não reagendar um compromisso.</p></div>
+          <button id="refresh-agenda-proposals" type="button" class="btn btn-outline">↻ Atualizar propostas</button>
+        </div>
+        <article class="card">
+          <div class="card-head"><h2>Minhas decisões</h2><span class="overline">APROVAÇÃO MANUAL / POSTGRESQL</span></div>
+          <p id="agenda-proposals-status" class="hint" role="status" aria-live="polite">Aguardando consulta ao servidor...</p>
+          <div id="agenda-proposals-list" class="recurrence-list"></div>
+          <div class="tip">Propostas vencem após 15 minutos. A aprovação só registra a decisão no CORTEX; não altera Google Agenda, lembretes ou recorrências. Verifique a agenda antes de mudar qualquer horário manualmente.</div>
         </article>
       </section>
 
