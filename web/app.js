@@ -754,6 +754,48 @@ $("#backend-notice-refresh").addEventListener("click", event =>
   action(loadBackendCenter, event.currentTarget));
 $("#backend-notice-view").addEventListener("change", () => void action(loadBackendCenter));
 
+// V17: manual calendar export with in-memory Bearer token. Never expose a
+// token in URLs, anchor hrefs, logs or persistent browser storage.
+async function downloadAgendaIcs(period) {
+  if (!["today","tomorrow","week"].includes(period)) {
+    throw new Error("Selecione um período válido para a exportação.");
+  }
+  if (!window.confirm("Exportar os títulos e horários dos seus lembretes para um arquivo .ics? "+
+    "O arquivo ficará no dispositivo e poderá ser lido por outros aplicativos. "+
+    "A importação não terá sincronização automática.")) return;
+  const headers={Accept:"text/calendar"};
+  if(state.token)headers.Authorization="Bearer "+state.token;
+  const response=await fetch("/api/agenda/export?period="+encodeURIComponent(period),{
+    method:"GET",headers,credentials:"same-origin",cache:"no-store"
+  });
+  if(!response.ok){
+    let details={};
+    try{details=await response.json();}catch{/* avoid exposing server response body */}
+    if(response.status===401)throw new Error("Informe um token CORTEX_API_TOKEN válido.");
+    throw new Error(details.error||"Falha na exportação HTTP "+response.status);
+  }
+  if(!(response.headers.get("content-type")||"").includes("text/calendar")){
+    throw new Error("O servidor não retornou um calendário válido.");
+  }
+  const file=await response.blob();
+  const objectUrl=URL.createObjectURL(file);
+  try{
+    const link=document.createElement("a");
+    link.href=objectUrl;
+    link.download="cortex-agenda-"+period+".ics";
+    link.style.display="none";
+    document.body.append(link);
+    link.click();
+    link.remove();
+  }finally{
+    // Browser download may start asynchronously, so revoke after a short delay.
+    window.setTimeout(()=>URL.revokeObjectURL(objectUrl),30000);
+  }
+  showNotice("Arquivo .ics preparado. Importe-o manualmente no aplicativo de calendário.","success");
+}
+$("#export-calendar").addEventListener("click",event=>action(
+  ()=>downloadAgendaIcs($("#agenda-export-period").value),event.currentTarget));
+
 // CORTEX V14: opt-in browser watch. The durable scheduler remains on the server.
 let reminderWatchTimer = null;
 let browserRemindersEnabled = false;
@@ -1082,6 +1124,8 @@ function renderChatInspection(result) {
     target.append(makeButton("Ver meus lembretes ↗","btn-outline",()=>{
       tab("reminders");
     }));
+    target.append(makeButton("↓ Exportar período .ics","btn-outline",
+      ()=>downloadAgendaIcs(agenda.period)));
     return;
   }
   if(result?.recurringProposal){

@@ -66,6 +66,11 @@ describe("CORTEX web console", () => {
     expect(script.body).toContain('if(result?.recurringProposal)');
     expect(script.body).toContain('if(result?.agenda)');
     expect(index.body).toContain('id="chat-agenda-today"');
+    expect(index.body).toContain('id="export-calendar"');
+    expect(index.body).toContain('id="agenda-export-period"');
+    expect(script.body).toContain('async function downloadAgendaIcs(period)');
+    expect(script.body).toContain('URL.revokeObjectURL(objectUrl)');
+    expect(script.body).toContain('Accept:"text/calendar"');
     expect(script.body).toContain('if (result?.reminderProposal)');
     expect(script.body).toContain('Confirmar e agendar');
     expect(script.body).toContain('api("/api/workflows/propose"');

@@ -35,6 +35,7 @@ import { PostgresRecurrenceRepository } from "./reminders/recurrence-store.js";
 import { validateNewSchedule } from "./reminders/recurrence.js";
 import { interpretRecurringReminder } from "./reminders/recurrence-interpret.js";
 import { interpretAgendaQuestion, readAgenda, agendaAnswer } from "./reminders/agenda.js";
+import { exportAgendaIcs, CalendarExportTooLargeError } from "./reminders/ical.js";
 import {
   InMemoryAlertAcknowledgementStore,
   PostgresAlertAcknowledgementStore,
@@ -475,6 +476,31 @@ app.post("/api/reminders/:id/:action", { preHandler: authenticate }, async (requ
   }
   return {reminder:await reminderStore.get(config.CORTEX_USER_ID,id),
     actionExecuted:false,approvalGranted:false};
+});
+
+// V17: authenticated one-time iCalendar export. No OAuth, calendar account,
+// remote API calls, tokens in query strings or database writes.
+app.get("/api/agenda/export",{preHandler:authenticate},async(request,reply)=>{
+  if(!reminderStore||!recurrenceStore)
+    return reply.code(503).send({error:"PostgreSQL is required for calendar export"});
+  const period=(request.query as {period?:unknown}).period??"week";
+  if(period!=="today"&&period!=="tomorrow"&&period!=="week")
+    return reply.code(400).send({error:"period must be today, tomorrow or week"});
+  const snapshot=await readAgenda({reminders:reminderStore,recurrences:recurrenceStore},
+    config.CORTEX_USER_ID,period);
+  let body:string;
+  try{body=exportAgendaIcs(snapshot,config.CORTEX_USER_ID);}
+  catch(error){
+    if(error instanceof CalendarExportTooLargeError)
+      return reply.code(409).send({error:error.message});
+    throw error;
+  }
+  return reply
+    .header("Cache-Control","private, no-store, max-age=0")
+    .header("X-Content-Type-Options","nosniff")
+    .header("Content-Disposition",'attachment; filename="cortex-agenda-'+period+'.ics"')
+    .type("text/calendar; charset=utf-8")
+    .send(body);
 });
 
 // V16: owner-scoped, read-only agenda snapshot. No persistence or tool calls.

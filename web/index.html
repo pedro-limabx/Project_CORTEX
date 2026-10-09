@@ -243,9 +243,19 @@
           <div>
             <div class="eyebrow">PERSONAL ASSISTANCE / CORTEX V15</div>
             <h1>Seus <span>lembretes.</span></h1>
-            <p>Agende um aviso pessoal. O servidor identifica vencimentos e mantém os lembretes disponíveis no painel.</p>
+            <p>Agende um aviso pessoal. O servidor identifica vencimentos e mantém os lembretes disponíveis no painel. Exporte uma cópia para calendários externos (sem sincronização automática).</p>
           </div>
-          <button id="refresh-reminders" type="button" class="btn btn-outline">↻ Atualizar lembretes</button>
+          <div class="actions">
+            <label class="field-label" for="agenda-export-period">Exportar período
+              <select id="agenda-export-period">
+                <option value="week" selected>Próximos 7 dias</option>
+                <option value="today">Hoje</option>
+                <option value="tomorrow">Amanhã</option>
+              </select>
+            </label>
+            <button id="export-calendar" type="button" class="btn btn-outline">↓ Exportar .ics</button>
+            <button id="refresh-reminders" type="button" class="btn btn-outline">↻ Atualizar lembretes</button>
+          </div>
         </div>
         <div class="columns">
           <article class="card">
