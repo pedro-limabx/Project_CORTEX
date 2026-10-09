@@ -828,6 +828,23 @@ $("#google-calendar-disconnect").addEventListener("click",event=>action(async()=
   showNotice("Tokens Google locais removidos. Revogue também o consentimento no Google, se desejar.","success");
 },event.currentTarget));
 
+// V20 quick unified agenda query: optional Google account, no discarded drafts.
+$("#chat-unified-today").addEventListener("click",()=>{
+  tab("chat");
+  if(chatSending){
+    showNotice("Aguarde a resposta atual do NEURON.");
+    return;
+  }
+  const input=$("#message");
+  if(input.value.trim()){
+    showNotice("Há um rascunho não enviado. Envie ou apague antes da consulta unificada.");
+    input.focus();
+    return;
+  }
+  input.value="Minha agenda completa de hoje";
+  void sendChatMessage();
+});
+
 // V17: manual calendar export with in-memory Bearer token. Never expose a
 // token in URLs, anchor hrefs, logs or persistent browser storage.
 async function downloadAgendaIcs(period) {
@@ -1175,6 +1192,42 @@ $("#chat-form").addEventListener("submit", (event) => {
 });
 function renderChatInspection(result) {
   const target = clear($("#chat-inspect"));
+  if(result?.unifiedAgenda){
+    const agenda=result.unifiedAgenda;
+    target.append(node("span","status completed","Agenda unificada · somente leitura"));
+    target.append(headline("Compromissos · São Paulo"));
+    textDetail(target,"Período",{
+      today:"Hoje",tomorrow:"Amanhã",week:"Próximos 7 dias"
+    }[agenda.period]||"—");
+    textDetail(target,"Origem",agenda.google==="connected"
+      ?"CORTEX + Google Agenda":"Somente CORTEX · Google não consultado");
+    textDetail(target,"Contagem",agenda.totals.cortex+" entrada(s) locais, "+
+      agenda.totals.google+" evento(s) Google, "+
+      agenda.totals.matched+" correspondência(s) exata(s)");
+    for(const note of agenda.warnings??[])target.append(info(note));
+    if(!agenda.items.length)target.append(info("Nenhum compromisso nas fontes consultadas."));
+    for(const item of agenda.items){
+      const entry=node("div","workflow-step");
+      const when=item.allDay
+        ?item.start.split("-").reverse().join("/")+" · Dia inteiro"
+        :dateTime(item.start)+" · São Paulo";
+      const sources=item.sources.includes("google")&&item.sources.includes("cortex")
+        ?"CORTEX + Google":item.sources.includes("google")?"Google Agenda":
+          item.cortexKind==="recurrence-preview"?"CORTEX · previsão recorrente":"CORTEX · salvo";
+      entry.append(node("strong","",item.title),node("p","row-meta",when+" · "+sources));
+      target.append(entry);
+    }
+    if(agenda.truncated)target.append(info(
+      "Consulta parcial: os limites das fontes ou do painel podem omitir outros eventos."));
+    target.append(makeButton("Ver lembretes do CORTEX ↗","btn-outline",()=>tab("reminders")));
+    target.append(makeButton("Ver Google Agenda ↗","btn-outline",()=>tab("google-calendar")));
+    return;
+  }
+  if(result?.unifiedAgendaHelp){
+    target.append(headline("Agenda unificada · consulte por período"));
+    target.append(info(result.text||"Use hoje, amanhã ou os próximos 7 dias."));
+    return;
+  }
   if(result?.googleAgenda){
     const agenda=result.googleAgenda;
     target.append(node("span","status completed","Google Agenda · somente leitura"));

@@ -60,3 +60,24 @@ A resposta tem `mode=google-calendar-readonly` e `googleAgenda: {source:"google-
 São retornados no máximo 50 eventos por consulta, com indicador de paginação quando o Google informar mais resultados; a resposta em texto resume no máximo 10. Perguntas sobre **reuniões** consultam todos os eventos do período, pois o Google não distingue automaticamente reuniões de outros compromissos pela estrutura da agenda. A V19 não sincroniza ou unifica permanentemente os dois calendários e não envia eventos para outras integrações.
 
 **Pré-requisito:** concluir a configuração OAuth da V18 e conectar sua conta pelo painel. Testes automatizados usam um provedor simulado; uma conta Google real só será acessada com sua autorização.
+
+
+## V20 — Agenda Unificada (NEURON Chat e API)
+
+A V20 oferece uma **consulta pontual e somente leitura** dos lembretes CORTEX (registros persistidos e recorrências futuras previstas) e eventos do **calendário principal** do Google quando OAuth V18 estiver ativo. Perguntas explícitas incluem:
+
+- `Minha agenda completa de hoje`
+- `Minha agenda unificada de amanhã`
+- `Mostre tudo que tenho agendado hoje`
+- `Junte meus lembretes e eventos do Google amanhã`
+- `Minha agenda completa dos próximos 7 dias`
+
+O botão **Agenda completa hoje** no NEURON Chat envia uma consulta após clique, protegendo rascunhos não enviados.
+
+A API `GET /api/agenda/unified?period=today|tomorrow|week` reutiliza a consulta autenticada e limitada da V16 e a conexão Google somente leitura da V18. Dados de ambos são identificados com `sources` (`cortex`, `google` ou ambos). Apenas eventos cronometrados com **título normalizado e instante UTC idênticos** são apresentados numa mesma linha, marcando as duas origens; eventos de dia inteiro não são fundidos automaticamente. Isso não representa identidade garantida do compromisso — títulos e horários iguais podem ser coincidências. Nenhuma entrada é apagada ou alterada na origem.
+
+**Sem Google configurado ou conectado:** continua mostrando os lembretes locais, avisando explicitamente que o Google não foi consultado. Falha ou expiração da autorização também produz aviso, preservando a agenda local. A API retorna `google` com o estado da conexão e `warnings` de possível incompletude, sem expor detalhes de OAuth.
+
+O calendário usa a zona civil `America/Sao_Paulo`; os eventos externos de dia inteiro mantêm a data sem conversão de fuso. Respostas de texto resumem até 10 resultados; a visualização oferece até 50 itens mesclados, podendo ser parcial porque o CORTEX limita a leitura a 30 entradas e o Google a 50. A propriedade `truncated` sinaliza limites ou paginação de qualquer origem. Não há sincronização, escrita, importação automática, persistência de eventos externos, execução de ferramentas nem envio de eventos a um LLM. Apenas a renovação de credenciais OAuth já autorizadas pode atualizar o armazenamento de tokens.
+
+Se o PostgreSQL interno estiver indisponível, a consulta unificada retorna 503, em vez de inventar lembretes. Perguntas fora de hoje, amanhã e próximos 7 dias recebem orientação. Esta versão **não estabelece** uma conta Google real: a configuração OAuth e o consentimento precisam ser concluídos no Codespaces para obter eventos do Google.

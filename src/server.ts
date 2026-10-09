@@ -38,6 +38,9 @@ import { interpretAgendaQuestion, readAgenda, agendaAnswer } from "./reminders/a
 import { exportAgendaIcs, CalendarExportTooLargeError } from "./reminders/ical.js";
 import { interpretGoogleCalendarQuestion, queryGoogleCalendarForChat } from "./integrations/google-chat.js";
 import {
+  interpretUnifiedAgendaQuestion,getUnifiedAgenda,unifiedAgendaAnswer
+} from "./integrations/unified-agenda.js";
+import {
   GoogleCalendarReadOnly, GoogleCalendarAuthError, GoogleCalendarRemoteError
 } from "./integrations/google-calendar.js";
 import {
@@ -583,6 +586,18 @@ app.get("/api/agenda/export",{preHandler:authenticate},async(request,reply)=>{
     .send(body);
 });
 
+// V20: read-only composite view; a Google failure cannot erase local reminders.
+app.get("/api/agenda/unified",{preHandler:authenticate},async(request,reply)=>{
+  if(!reminderStore||!recurrenceStore)
+    return reply.code(503).send({error:"PostgreSQL is required for unified agenda"});
+  const period=(request.query as {period?:unknown}).period??"today";
+  if(period!=="today"&&period!=="tomorrow"&&period!=="week")
+    return reply.code(400).send({error:"period must be today, tomorrow or week"});
+  const data=await getUnifiedAgenda({reminders:reminderStore,recurrences:recurrenceStore},
+    googleCalendar,config.CORTEX_USER_ID,period);
+  return reply.header("Cache-Control","private, no-store").send(data);
+});
+
 // V16: owner-scoped, read-only agenda snapshot. No persistence or tool calls.
 app.get("/api/agenda",{preHandler:authenticate},async(request,reply)=>{
   if(!reminderStore||!recurrenceStore)
@@ -751,6 +766,28 @@ app.post("/api/chat", { preHandler: authenticate }, async (request, reply) => {
 
   if (typeof body.message !== "string" || body.message.trim().length === 0) {
     return reply.code(400).send({ error: "message is required" });
+  }
+
+  // V20: explicit unified questions have priority over V19 Google-only
+  // and V16 CORTEX-only questions. No LLM or write operations are involved.
+  const unifiedPeriod=interpretUnifiedAgendaQuestion(body.message.trim());
+  if(unifiedPeriod){
+    if(unifiedPeriod==="unsupported")return reply.header("Cache-Control","private, no-store").send({
+      requestId:crypto.randomUUID(),mode:"unified-agenda-help",
+      unifiedAgendaHelp:{reason:"unsupported-period"},
+      text:"A agenda unificada aceita hoje, amanhã ou os próximos 7 dias. Reformule sua pergunta, por exemplo: 'Minha agenda completa de amanhã'.",
+      actionExecuted:false,readOnly:true
+    });
+    if(!reminderStore||!recurrenceStore)
+      return reply.code(503).send({error:"PostgreSQL is required for unified agenda"});
+    const unifiedAgenda=await getUnifiedAgenda(
+      {reminders:reminderStore,recurrences:recurrenceStore},
+      googleCalendar,config.CORTEX_USER_ID,unifiedPeriod
+    );
+    return reply.header("Cache-Control","private, no-store").send({
+      requestId:crypto.randomUUID(),mode:"unified-agenda-readonly",
+      text:unifiedAgendaAnswer(unifiedAgenda),unifiedAgenda,actionExecuted:false,readOnly:true
+    });
   }
 
   // V19: only explicit questions about Google events trigger remote access.
