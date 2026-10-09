@@ -61,6 +61,16 @@ describe("CORTEX branding and splash assets", () => {
     callbacks.get("skip:click")?.();
     expect(video.pause).toHaveBeenCalledOnce(); // idempotent
   });
+  it("provides a stable, distinguishable missing-asset reason", async () => {
+    const app=Fastify();
+    registerConsole(app);
+    const media=await app.inject({method:"GET",url:"/console/media/logo.webp"});
+    if(media.statusCode===404) {
+      expect(media.json()).toMatchObject({error:"Brand logo asset not installed"});
+      expect(media.body).not.toContain("Route GET:");
+    } else expect(media.statusCode).toBe(200);
+    await app.close();
+  });
   it("keeps routes allowlisted and never renders arbitrary server files", async () => {
     const app=Fastify();
     registerConsole(app);

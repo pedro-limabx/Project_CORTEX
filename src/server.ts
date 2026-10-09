@@ -137,6 +137,7 @@ app.get("/health", async () => ({
   service: "cortex",
   intelligence: "neuron",
   version: "0.3.0",
+  capabilities: { brandingMediaRoutes: true },
   timestamp: new Date().toISOString()
 }));
 
