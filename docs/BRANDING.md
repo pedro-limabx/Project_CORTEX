@@ -6,12 +6,12 @@ A interface usa a logo do cérebro/circuitos ao lado de **CORTEX / LABORATÓRIO 
 
 A branch inclui o código da interface e as rotas para os recursos estáticos. Por serem mídias binárias fornecidas no chat, **os arquivos devem ser copiados uma vez para a pasta** `web/assets/` do projeto:
 
-- `web/assets/cortex-logo.webp` — logo recortada da imagem original, com fundo preto preservado.
+- `web/assets/cortex-logo.png` — emblema branco de cérebro e circuitos, sem estrela e com fundo transparente, versionado no GitHub.
 - `web/assets/cortex-intro.mp4` — vídeo original de aproximadamente **10 segundos**, sem redução da duração.
 
 O pacote de mídia entregue no chat contém os dois arquivos na estrutura `web/assets/`. No Codespaces, envie o ZIP para a raiz do projeto e execute `unzip -o cortex-branding-assets.zip` antes de iniciar o servidor. Outra opção é arrastar os arquivos diretamente para `web/assets/` no VS Code.
 
-**IMPORTANTE:** a implementação no GitHub funciona sem as mídias com um fallback visual por 1,8 segundo; a *animação enviada* só aparece quando `cortex-intro.mp4` estiver efetivamente instalado. Sem `cortex-logo.webp`, a barra lateral mantém o ícone anterior. É necessário incluir os binários no Codespaces ou no deploy permanente; o código não pode recuperar automaticamente anexos privados do ChatGPT.
+**IMPORTANTE:** a nova logo PNG já acompanha o código do GitHub, sem precisar copiar imagens manualmente. O vídeo enviado permanece como mídia local separada: a *animação enviada* só aparece quando `cortex-intro.mp4` estiver efetivamente instalado. Sem vídeo, há um fallback de 1,8 segundo. É necessário incluir os binários no Codespaces ou no deploy permanente; o código não pode recuperar automaticamente anexos privados do ChatGPT.
 
 ## Diagnóstico de HTTP 404 (Codespaces)
 
@@ -39,11 +39,11 @@ O script é somente leitura, não envia credenciais e não altera processos, arq
 
 ## Regras da abertura
 
-- O vídeo toca a cada entrada/recarregamento da página do painel, **não** a cada reinício de um processo Node.js sem página aberta.
+- O vídeo é tentado a cada entrada/recarregamento da página do painel, **não** a cada reinício de um processo Node.js sem página aberta. O botão **Rever abertura** recarrega o painel para testá-lo novamente (rascunhos não enviados não são preservados).
 - Autoplay sempre mudo (`muted`) e `playsinline`; não há controles nem repetição (`loop`).
 - `ended` revela o painel normalmente. O botão **Pular animação** encerra imediatamente.
 - Falhas ao carregar ou bloqueio de reprodução acionam uma animação visual curta; há watchdog de 15 segundos contra tela bloqueada.
-- `prefers-reduced-motion` evita a abertura em dispositivos com redução de movimento ativada.
+- A preferência de redução de movimento **não bloqueia** a abertura, conforme solicitação do proprietário. Sempre há um botão de pular, fallback curto e limite máximo de 15 segundos.
 - A URL do vídeo oferece suporte a requisições HTTP `Range` (206/416), permitindo seek/cache parcial conforme o navegador.
 - `media-src 'self'` na CSP permite somente mídia same-origin. Não são reveladas chaves de IA, tokens ou credenciais pelo navegador.
 

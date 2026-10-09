@@ -35,7 +35,8 @@ function startCortexSplash() {
   skip.addEventListener("click", finish, {once: true});
   video.addEventListener("ended", finish, {once: true});
   video.addEventListener("error", showFallback, {once: true});
-  if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+  // Owner explicitly requests intro at every page entry. Skip remains available
+  // so the animation is always optional to watch.
 
   splash.hidden = false;
   document.body.classList.add("cortex-opening");
@@ -49,6 +50,7 @@ function startCortexSplash() {
   }
 }
 startCortexSplash();
+document.querySelector("#replay-intro")?.addEventListener("click", () => window.location.reload());
 
 // Interface experimental. Nenhum token é persistido, e todo texto remoto usa textContent.
 const state = {

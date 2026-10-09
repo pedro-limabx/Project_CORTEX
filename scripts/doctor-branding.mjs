@@ -6,7 +6,7 @@ import { resolve, dirname } from "node:path";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const expected = [
-  { name: "LOGO", file: "web/assets/cortex-logo.webp", path: "/console/media/logo.webp" },
+  { name: "LOGO", file: "web/assets/cortex-logo.png", path: "/console/media/logo.png" },
   { name: "VÍDEO", file: "web/assets/cortex-intro.mp4", path: "/console/media/intro.mp4" }
 ];
 
@@ -53,7 +53,7 @@ export async function run() {
   output("Pasta do projeto:", root);
   output("Pasta do terminal:", process.cwd());
   output("Commit local:", command("git",["rev-parse","--short","HEAD"]));
-  const registered = (await readFile(resolve(root,"src/console.ts"),"utf8")).includes('app.get("/console/media/logo.webp"');
+  const registered = (await readFile(resolve(root,"src/console.ts"),"utf8")).includes('app.get("/console/media/logo.png"');
   output("Rotas no código-fonte:", registered ? "PRESENTES" : "AUSENTES — atualize a main");
   const localFiles = [];
   for (const resource of expected) {

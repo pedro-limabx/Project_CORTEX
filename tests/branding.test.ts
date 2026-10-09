@@ -61,14 +61,25 @@ describe("CORTEX branding and splash assets", () => {
     callbacks.get("skip:click")?.();
     expect(video.pause).toHaveBeenCalledOnce(); // idempotent
   });
+  it("does not overlay a fallback star or black background over the approved emblem", async () => {
+    const [html,css,js] = await Promise.all([
+      readFile(resolve(process.cwd(),"web/index.html"),"utf8"),
+      readFile(resolve(process.cwd(),"web/styles.css"),"utf8"),
+      readFile(resolve(process.cwd(),"web/app.js"),"utf8")
+    ]);
+    expect(html).toContain('src="/console/media/logo.png"');
+    expect(html).not.toContain('class="brand-fallback"');
+    expect(css).toContain("background:transparent;border-radius:0;box-shadow:none");
+    expect(css).toContain("mix-blend-mode:normal");
+    expect(js).not.toContain('if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;');
+    expect(html).toContain('id="replay-intro"');
+  });
   it("provides a stable, distinguishable missing-asset reason", async () => {
     const app=Fastify();
     registerConsole(app);
-    const media=await app.inject({method:"GET",url:"/console/media/logo.webp"});
-    if(media.statusCode===404) {
-      expect(media.json()).toMatchObject({error:"Brand logo asset not installed"});
-      expect(media.body).not.toContain("Route GET:");
-    } else expect(media.statusCode).toBe(200);
+    const media=await app.inject({method:"GET",url:"/console/media/logo.png"});
+    expect(media.statusCode).toBe(200);
+    expect(media.headers["content-type"]).toContain("image/png");
     await app.close();
   });
   it("keeps routes allowlisted and never renders arbitrary server files", async () => {
@@ -76,10 +87,11 @@ describe("CORTEX branding and splash assets", () => {
     registerConsole(app);
     const bad=await app.inject({method:"GET",url:"/console/media/%2e%2e%2f.env"});
     expect(bad.statusCode).toBe(404);
-    const route=await app.inject({method:"GET",url:"/console/media/logo.webp"});
+    const route=await app.inject({method:"GET",url:"/console/media/logo.png"});
     // Assets can be installed after code. When installed, must be served as images.
-    expect([200,404]).toContain(route.statusCode);
-    if(route.statusCode===200) expect(route.headers["content-type"]).toContain("image/webp");
+    expect(route.statusCode).toBe(200);
+    expect(route.headers["content-type"]).toContain("image/png");
+    expect(route.rawPayload.subarray(0,8).toString("hex")).toBe("89504e470d0a1a0a");
     await app.close();
   });
 });
