@@ -31,6 +31,8 @@ import { diagnoseMonitorHealth } from "./autonomy/diagnostics.js";
 import { PostgresReminderRepository } from "./reminders/store.js";
 import { ReminderScheduler, ReminderInputError, validateNewReminder } from "./reminders/service.js";
 import { interpretReminder } from "./reminders/interpret.js";
+import { PostgresRecurrenceRepository } from "./reminders/recurrence-store.js";
+import { validateNewSchedule } from "./reminders/recurrence.js";
 import {
   InMemoryAlertAcknowledgementStore,
   PostgresAlertAcknowledgementStore,
@@ -73,6 +75,7 @@ let workflowStore: WorkflowStore;
 let alertAcknowledgements: AlertAcknowledgementStore;
 let autonomousStore: PostgresMonitorRepository | undefined;
 let reminderStore: PostgresReminderRepository | undefined;
+let recurrenceStore: PostgresRecurrenceRepository | undefined;
 if (pool) {
   const postgresMemory = new PostgresMemoryStore(pool);
   await postgresMemory.initialize();
@@ -96,6 +99,8 @@ if (pool) {
   await autonomousStore.initialize();
   reminderStore = new PostgresReminderRepository(pool);
   await reminderStore.initialize();
+  recurrenceStore = new PostgresRecurrenceRepository(pool);
+  await recurrenceStore.initialize();
   app.log.info("Persistent PostgreSQL memory and audit enabled");
 } else {
   memory = new InMemoryStore();
@@ -127,7 +132,7 @@ const backendMonitor = autonomousStore
   : undefined;
 const reminderScheduler = reminderStore
   ? new ReminderScheduler(reminderStore, config.CORTEX_USER_ID, () => new Date(),
-      () => app.log.error("Reminder scheduler failed (details redacted)"))
+      () => app.log.error("Reminder scheduler failed (details redacted)"),recurrenceStore)
   : undefined;
 const neuron = new NeuronCore(llm, memory, registry, executor, permissions, approvals, audit, workflowReporter);
 const workflows = new WorkflowEngine(workflowStore, registry, executor, permissions, approvals, audit);
@@ -468,6 +473,46 @@ app.post("/api/reminders/:id/:action", { preHandler: authenticate }, async (requ
   }
   return {reminder:await reminderStore.get(config.CORTEX_USER_ID,id),
     actionExecuted:false,approvalGranted:false};
+});
+
+// V15: schedule CRUD. All actions authenticate and scope by CORTEX_USER_ID;
+// no schedule creation or modification happens without explicit POST.
+app.get("/api/reminder-schedules", {preHandler:authenticate},async (request,reply)=>{
+  if(!recurrenceStore)return reply.code(503).send({error:"PostgreSQL is required for recurring reminders"});
+  const query=request.query as {limit?:unknown};
+  const limit=query.limit===undefined?50:Number(query.limit);
+  if(!Number.isInteger(limit)||limit<1||limit>100)
+    return reply.code(400).send({error:"limit must be an integer from 1 to 100"});
+  return {schedules:await recurrenceStore.list(config.CORTEX_USER_ID,limit),
+    timeZone:"America/Sao_Paulo",delivery:"in-app-only"};
+});
+app.post("/api/reminder-schedules",{preHandler:authenticate},async(request,reply)=>{
+  if(!recurrenceStore)return reply.code(503).send({error:"PostgreSQL is required for recurring reminders"});
+  let validated:ReturnType<typeof validateNewSchedule>;
+  try{validated=validateNewSchedule(request.body);}
+  catch(error){
+    if(error instanceof ReminderInputError)return reply.code(400).send({error:error.message});
+    throw error;
+  }
+  const schedule=await recurrenceStore.create(config.CORTEX_USER_ID,validated,new Date().toISOString());
+  return reply.code(201).send({schedule,delivery:"in-app-only",actionExecuted:false});
+});
+app.post("/api/reminder-schedules/:id/:action",{preHandler:authenticate},async(request,reply)=>{
+  if(!recurrenceStore)return reply.code(503).send({error:"PostgreSQL is required for recurring reminders"});
+  const {id,action}=request.params as {id:string;action:string};
+  const body=request.body;
+  if(!reminderUuid.test(id)||!["pause","resume","cancel"].includes(action)
+      ||!body||typeof body!=="object"||Array.isArray(body)
+      ||Object.keys(body).length!==1||(body as {confirmed?:unknown}).confirmed!==true){
+    return reply.code(400).send({error:"Valid id, action and confirmed=true required"});
+  }
+  const updated=await recurrenceStore.transition(config.CORTEX_USER_ID,id,
+    action as "pause"|"resume"|"cancel",new Date().toISOString());
+  if(!updated){
+    const found=await recurrenceStore.get(config.CORTEX_USER_ID,id);
+    return reply.code(found?409:404).send({error:found?"Invalid schedule transition":"Schedule not found"});
+  }
+  return {schedule:await recurrenceStore.get(config.CORTEX_USER_ID,id),actionExecuted:false};
 });
 
 // Reporting is read-only and scoped to the server-controlled identity.
