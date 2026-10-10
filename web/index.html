@@ -40,6 +40,7 @@
        <button class="nav-button" data-tab="reminders">◷ <span>Lembretes</span><span class="nav-reminder-count" id="nav-reminder-count" aria-label="Lembretes vencidos" hidden></span></button>
       <button class="nav-button" data-tab="google-calendar">▦ <span>Google Agenda</span></button>
       <button class="nav-button" data-tab="agenda-proposals">◇ <span>Propostas de agenda</span></button>
+      <button class="nav-button" data-tab="agenda-history">↶ <span>Histórico da agenda</span></button>
       <button class="nav-button" data-tab="chat">✦ <span>NEURON Chat</span></button>
       <button class="nav-button" data-tab="workflows">⬡ <span>Workflows v2</span></button>
       <button class="nav-button" data-tab="tasks">▤ <span>Tarefas</span></button>
@@ -368,6 +369,22 @@
           <p id="agenda-proposals-status" class="hint" role="status" aria-live="polite">Aguardando consulta ao servidor...</p>
           <div id="agenda-proposals-list" class="recurrence-list"></div>
           <div class="tip">Aprovar apenas registra sua decisão. Aplicar é um comando separado que altera somente um lembrete CORTEX ainda pendente, após nova verificação. Propostas vencem após 15 minutos. Eventos Google e regras de recorrência nunca são alterados.</div>
+        </article>
+      </section>
+
+      <section class="panel" data-panel="agenda-history" hidden>
+        <div class="page-heading">
+          <div><div class="eyebrow">PERSONAL ASSISTANCE / CORTEX V24</div>
+            <h1>Histórico de <span>alterações.</span></h1>
+            <p>Consulte mudanças reais realizadas em lembretes internos e verifique se um horário anterior pode ser restaurado com segurança.</p>
+          </div>
+          <button id="refresh-agenda-history" type="button" class="btn btn-outline">↻ Atualizar histórico</button>
+        </div>
+        <article class="card">
+          <div class="card-head"><h2>Alterações registradas</h2><span class="overline">LEMBRETES / AUDITORIA LOCAL</span></div>
+          <p id="agenda-history-status" class="hint" role="status" aria-live="polite">Aguardando consulta...</p>
+          <div id="agenda-history-list" class="recurrence-list"></div>
+          <div class="tip">A reversão exige confirmação e só é possível até 30 minutos após a aplicação. O horário original deve continuar futuro, o lembrete deve estar pendente e a agenda precisa ser verificada novamente. Eventos Google nunca são modificados.</div>
         </article>
       </section>
 
