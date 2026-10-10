@@ -14,7 +14,7 @@ export class PostgresAgendaProposalStore {
       await client.query([
         "CREATE TABLE IF NOT EXISTS cortex_agenda_proposals (",
         "id UUID PRIMARY KEY,user_id TEXT NOT NULL,",
-        "status TEXT NOT NULL CHECK (status IN ('PENDING_REVIEW','APPROVED','REJECTED','APPLIED')),",
+        "status TEXT NOT NULL CHECK (status IN ('PENDING_REVIEW','APPROVED','REJECTED','APPLIED','REVERTED')),",
         "state JSONB NOT NULL,expires_at TIMESTAMPTZ NOT NULL,",
         "created_at TIMESTAMPTZ NOT NULL,reviewed_at TIMESTAMPTZ)"
       ].join(" "));
@@ -23,7 +23,7 @@ export class PostgresAgendaProposalStore {
       await client.query([
         "ALTER TABLE cortex_agenda_proposals",
         "ADD CONSTRAINT cortex_agenda_proposals_status_check",
-        "CHECK (status IN ('PENDING_REVIEW','APPROVED','REJECTED','APPLIED'))"
+        "CHECK (status IN ('PENDING_REVIEW','APPROVED','REJECTED','APPLIED','REVERTED'))"
       ].join(" "));
       await client.query([
         "CREATE INDEX IF NOT EXISTS cortex_agenda_proposals_owner_recent",
@@ -70,6 +70,17 @@ export class PostgresAgendaProposalStore {
     const result=await this.pool.query<{state:AgendaPlan;expires_at:Date|string}>([
       "SELECT state,expires_at FROM cortex_agenda_proposals",
       "WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2"
+    ].join(" "),[user,limit]);
+    return result.rows.map(x=>this.hydrate(x));
+  }
+  // V24: history derived from V23 applied plans, including later reversions.
+  // Older V23 records are retained without a data-copying migration.
+  async listChangeHistory(user:string,limit:number):Promise<StoredPlan[]>{
+    const result=await this.pool.query<{state:AgendaPlan;expires_at:Date|string}>([
+      "SELECT state,expires_at FROM cortex_agenda_proposals",
+      "WHERE user_id=$1 AND status IN ('APPLIED','REVERTED')",
+      "AND state->>'source'='cortex'",
+      "ORDER BY created_at DESC,id DESC LIMIT $2"
     ].join(" "),[user,limit]);
     return result.rows.map(x=>this.hydrate(x));
   }
@@ -160,6 +171,88 @@ export class PostgresAgendaProposalStore {
       return {proposal:this.hydrate(updated.rows[0]!),
         reminder:{id:reminderId,title:plan.title,
           previousDueAt:plan.originalStart,dueAt:plan.proposedStart}};
+    }catch(error){await client.query("ROLLBACK");throw error;}
+    finally{client.release();}
+  }
+
+  // V24: history and reminder change commit in a single atomic transaction.
+  // A replay or a concurrent second decision cannot apply the same undo.
+  async undoInternalReminder(user:string,id:string,expected:StoredPlan,
+    now=new Date()):Promise<{
+      proposal:StoredPlan;reminder:{id:string;title:string;previousDueAt:string;dueAt:string}
+    }|null>{
+    const client=await this.pool.connect();
+    try{
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1),23023)",[user]);
+      const found=await client.query<{state:AgendaPlan;status:string}>([
+        "SELECT state,status FROM cortex_agenda_proposals",
+        "WHERE id=$1::uuid AND user_id=$2 FOR UPDATE"
+      ].join(" "),[id,user]);
+      const row=found.rows[0],plan=row?.state;
+      const applied=plan?.appliedAt?Date.parse(plan.appliedAt):NaN;
+      if(!row||!plan||row.status!=="APPLIED"||plan.status!=="APPLIED"
+        ||plan.source!=="cortex"||plan.revertedAt
+        ||!Number.isFinite(applied)||applied>now.getTime()
+        ||now.getTime()>=applied+30*60_000
+        ||!/^cortex:[0-9a-f-]{36}$/i.test(plan.targetId)
+        ||plan.targetId!==expected.targetId
+        ||plan.originalStart!==expected.originalStart
+        ||plan.proposedStart!==expected.proposedStart
+        ||plan.title!==expected.title||plan.appliedAt!==expected.appliedAt
+        ||plan.originalEnd!==null||plan.proposedEnd!==null
+        ||Date.parse(plan.originalStart)<=now.getTime()+60_000){
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const reminderId=plan.targetId.slice("cortex:".length);
+      const locked=await client.query<{title:string;status:string;due_at:Date|string}>([
+        "SELECT title,status,due_at FROM cortex_reminders",
+        "WHERE id=$1::uuid AND user_id=$2 FOR UPDATE"
+      ].join(" "),[reminderId,user]);
+      const reminder=locked.rows[0];
+      if(!reminder||reminder.status!=="PENDING"||reminder.title!==plan.title
+        ||new Date(reminder.due_at).toISOString()!==plan.proposedStart){
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const occupied=await client.query([
+        "SELECT id FROM cortex_reminders WHERE user_id=$1 AND id<>$2::uuid",
+        "AND status IN ('PENDING','DUE') AND due_at >= $3::timestamptz",
+        "AND due_at < ($3::timestamptz + interval '30 minutes') LIMIT 1"
+      ].join(" "),[user,reminderId,plan.originalStart]);
+      if(occupied.rows.length){
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const moved=await client.query([
+        "UPDATE cortex_reminders SET due_at=$3::timestamptz",
+        "WHERE id=$1::uuid AND user_id=$2 AND title=$4",
+        "AND status='PENDING' AND due_at=$5::timestamptz",
+        "AND $3::timestamptz>NOW()+interval '1 minute'",
+        "RETURNING id"
+      ].join(" "),[reminderId,user,plan.originalStart,plan.title,plan.proposedStart]);
+      if(moved.rows.length!==1){
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const at=now.toISOString();
+      const updated=await client.query<{state:AgendaPlan;expires_at:Date|string}>([
+        "UPDATE cortex_agenda_proposals SET status='REVERTED',",
+        "state=state||jsonb_build_object('status','REVERTED','revertedAt',$3::text,'updatedAt',$3::text)",
+        "WHERE id=$1::uuid AND user_id=$2 AND status='APPLIED'",
+        "AND (state->>'appliedAt')::timestamptz<=NOW()",
+        "AND (state->>'appliedAt')::timestamptz>NOW()-INTERVAL '30 minutes'",
+        "RETURNING state,expires_at"
+      ].join(" "),[id,user,at]);
+      if(updated.rows.length!==1){
+        await client.query("ROLLBACK");
+        return null;
+      }
+      await client.query("COMMIT");
+      return {proposal:this.hydrate(updated.rows[0]!),
+        reminder:{id:reminderId,title:plan.title,
+          previousDueAt:plan.proposedStart,dueAt:plan.originalStart}};
     }catch(error){await client.query("ROLLBACK");throw error;}
     finally{client.release();}
   }

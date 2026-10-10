@@ -5,13 +5,13 @@ import type {AgendaPeriod} from "../reminders/agenda.js";
 import type {AgendaConflict,ConflictReport} from "./agenda-conflicts.js";
 import type {UnifiedAgenda,UnifiedItem} from "./unified-agenda.js";
 
-export type PlanStatus="PENDING_REVIEW"|"APPROVED"|"REJECTED"|"APPLIED";
+export type PlanStatus="PENDING_REVIEW"|"APPROVED"|"REJECTED"|"APPLIED"|"REVERTED";
 export type AgendaPlan={
   id:string;period:AgendaPeriod;conflictKey:string;targetId:string;
   title:string;source:"google"|"cortex";originalStart:string;originalEnd:string|null;
   proposedStart:string;proposedEnd:string|null;
   status:PlanStatus;createdAt:string;updatedAt:string;expiresAt:string;
-  reviewedAt:string|null;appliedAt?:string|null;externalChangeApplied:false;
+  reviewedAt:string|null;appliedAt?:string|null;revertedAt?:string|null;externalChangeApplied:false;
 };
 export type PlanDraft=Omit<AgendaPlan,
   "id"|"status"|"createdAt"|"updatedAt"|"expiresAt"|"reviewedAt"|"externalChangeApplied">;
