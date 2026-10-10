@@ -70,6 +70,13 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain('id="chat-unified-today"');
     expect(index.body).toContain('id="chat-conflicts-tomorrow"');
     expect(index.body).toContain('data-tab="agenda-proposals"');
+    expect(index.body).toContain('data-tab="agenda-history"');
+    expect(index.body).toContain('id="refresh-agenda-history"');
+    expect(index.body).toContain('CORTEX V24');
+    expect(script.body).toContain('async function loadAgendaHistory()');
+    expect(script.body).toContain('"/undo-preview"');
+    expect(script.body).toContain('"/undo"');
+    expect(script.body).toContain('REVERTED: "Horário restaurado"');
     expect(index.body).toContain('CORTEX V23');
     expect(script.body).toContain('APPLIED: "Aplicado ao CORTEX"');
     expect(script.body).toContain('"/apply"');

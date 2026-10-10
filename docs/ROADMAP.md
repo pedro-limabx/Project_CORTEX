@@ -36,3 +36,5 @@ V21: análise conservadora somente leitura dos conflitos entre eventos Google co
 V22: propostas persistentes de reorganização de agenda com escolha explícita do compromisso, geração no backend, preservação de duração, expiração e aprovação/rejeição atômicas. Aprovação não modifica compromissos externos ou internos.
 
 V23: aplicação explícita e transacional de propostas aprovadas apenas em lembretes internos PENDING do CORTEX, com revalidação, proteção contra replay e registro APPLIED; nenhuma alteração em eventos Google ou regras de recorrência.
+
+V24: histórico owner-scoped dos reagendamentos internos realmente aplicados pela V23, prévia de reversão supervisionada e restauração transacional do horário anterior dentro de 30 minutos quando a agenda atual permite, com registro REVERTED, sem editar Google.
