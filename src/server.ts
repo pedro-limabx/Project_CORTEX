@@ -47,6 +47,7 @@ import {
   draftAgendaPlan,validateInternalApplication,PlanInputError,PlanConflictError
 } from "./integrations/agenda-reorganization.js";
 import {PostgresAgendaProposalStore,ProposalQuotaError} from "./integrations/agenda-proposal-store.js";
+import {previewReminderUndo} from "./integrations/agenda-undo.js";
 import {
   GoogleCalendarReadOnly, GoogleCalendarAuthError, GoogleCalendarRemoteError
 } from "./integrations/google-calendar.js";
@@ -662,6 +663,61 @@ app.post("/api/agenda/proposals/:id/:decision",{preHandler:authenticate},async(r
   return reply.header("Cache-Control","private, no-store")
     .send({proposal:updated,externalChangeApplied:false,
       message:"Decisão registrada. Nenhum compromisso foi alterado."});
+});
+
+// V24: audit trail based on the durable V23 plan record, including both
+// original and restored due dates. All routes require Bearer and owner scope.
+app.get("/api/agenda/history",{preHandler:authenticate},async(request,reply)=>{
+  if(!agendaProposalStore||!reminderStore||!recurrenceStore)
+    return reply.code(503).send({error:"Configure PostgreSQL e CORTEX_API_TOKEN para consultar o histórico."});
+  const input=(request.query as {limit?:unknown}).limit;
+  const limit=input===undefined?30:Number(input);
+  if(!Number.isInteger(limit)||limit<1||limit>50)
+    return reply.code(400).send({error:"limit deve estar entre 1 e 50"});
+  const changes=await agendaProposalStore.listChangeHistory(config.CORTEX_USER_ID,limit);
+  return reply.header("Cache-Control","private, no-store")
+    .send({changes,source:"cortex",externalEventsModified:false});
+});
+app.get("/api/agenda/history/:id/undo-preview",{preHandler:authenticate},async(request,reply)=>{
+  if(!agendaProposalStore||!reminderStore||!recurrenceStore)
+    return reply.code(503).send({error:"Configure PostgreSQL e CORTEX_API_TOKEN para consultar o histórico."});
+  const {id}=request.params as {id:string};
+  if(!reminderUuid.test(id))return reply.code(400).send({error:"ID inválido"});
+  const plan=await agendaProposalStore.get(config.CORTEX_USER_ID,id);
+  if(!plan||plan.source!=="cortex"||!["APPLIED","REVERTED"].includes(plan.status))
+    return reply.code(404).send({error:"Alteração não encontrada"});
+  const now=new Date();
+  // Even a plan still within its undo window can be unsafe to restore.
+  // Query today's actual Google + CORTEX sources; if absent/partial, fail closed.
+  const unified=await getUnifiedAgenda({reminders:reminderStore,
+    recurrences:recurrenceStore},googleCalendar,config.CORTEX_USER_ID,"week",now);
+  const preview=previewReminderUndo(plan,unified,now);
+  return reply.header("Cache-Control","private, no-store").send({preview});
+});
+app.post("/api/agenda/history/:id/undo",{preHandler:authenticate},async(request,reply)=>{
+  if(!agendaProposalStore||!reminderStore||!recurrenceStore)
+    return reply.code(503).send({error:"Configure PostgreSQL e CORTEX_API_TOKEN para reverter."});
+  const {id}=request.params as {id:string};
+  const body=request.body;
+  if(!reminderUuid.test(id)||!body||typeof body!=="object"||Array.isArray(body)
+    ||Object.keys(body).length!==1||(body as {confirmed?:unknown}).confirmed!==true)
+    return reply.code(400).send({error:"ID válido e confirmed=true são obrigatórios"});
+  const plan=await agendaProposalStore.get(config.CORTEX_USER_ID,id);
+  if(!plan||plan.source!=="cortex"||!["APPLIED","REVERTED"].includes(plan.status))
+    return reply.code(404).send({error:"Alteração não encontrada"});
+  const now=new Date();
+  const unified=await getUnifiedAgenda({reminders:reminderStore,
+    recurrences:recurrenceStore},googleCalendar,config.CORTEX_USER_ID,"week",now);
+  const preview=previewReminderUndo(plan,unified,now);
+  if(!preview.eligible)return reply.code(409).send({error:preview.reason,preview});
+  const restored=await agendaProposalStore.undoInternalReminder(
+    config.CORTEX_USER_ID,id,plan,now);
+  if(!restored)return reply.code(409).send({
+    error:"O lembrete ou o registro mudou durante a operação. Consulte o histórico novamente."});
+  return reply.header("Cache-Control","private, no-store").send({
+    ...restored,internalReminderRestored:true,externalChangeApplied:false,
+    message:"Horário original restaurado no CORTEX. Nenhum evento do Google foi alterado."
+  });
 });
 
 // V23: application is a SECOND, explicit confirmation, separate from approval.
