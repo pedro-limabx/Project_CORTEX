@@ -42,11 +42,12 @@ describe("V24 preview and fail-closed undo rules",()=>{
     expect(UNDO_WINDOW_MINUTES).toBe(30);
   });
   it("declines non-applied, replayed, Google-only, or overdue history entries",()=>{
+    const {appliedAt:_withoutAppliedAt,...withoutAppliedAt}=plan;
     for(const candidate of [
       {...plan,status:"APPROVED" as const},
       {...plan,status:"REVERTED" as const,revertedAt:now.toISOString()},
       {...plan,source:"google" as const},
-      {...plan,appliedAt:undefined},
+      withoutAppliedAt,
       {...plan,originalEnd:"2026-10-10T12:30:00.000Z"},
       {...plan,proposedStart:plan.originalStart}
     ])expect(previewReminderUndo(candidate,agenda,now).eligible).toBe(false);
