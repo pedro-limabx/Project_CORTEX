@@ -95,6 +95,7 @@ const statusLabels = {
   APPROVED: "Plano aprovado",
   REJECTED: "Plano rejeitado",
   APPLIED: "Aplicado ao CORTEX",
+  REVERTED: "Horário restaurado",
   EXPIRED: "Expirado"
 };
 
@@ -188,7 +189,7 @@ async function action(operation, button = null) {
 function tab(name) {
   const labels = {
     overview: "Visão geral", monitoring: "Monitoramento", alerts: "Alertas", reminders: "Lembretes", "google-calendar":"Google Agenda", chat: "NEURON Chat",
-    "agenda-proposals":"Propostas de agenda",workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
+    "agenda-proposals":"Propostas de agenda","agenda-history":"Histórico da agenda",workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
   };
   if (!labels[name]) return;
   $$("[data-panel]").forEach(panel => { panel.hidden = panel.dataset.panel !== name; });
@@ -200,6 +201,7 @@ function tab(name) {
   if (name === "reminders") action(loadReminders);
   if (name === "google-calendar") action(loadGoogleCalendarStatus);
   if (name === "agenda-proposals") action(loadAgendaProposals);
+  if (name === "agenda-history") action(loadAgendaHistory);
   if (name === "workflows") action(loadWorkflows);
   if (name === "tasks") action(loadTasks);
   if (name === "tools") action(loadTools);
@@ -833,6 +835,56 @@ $("#google-calendar-disconnect").addEventListener("click",event=>action(async()=
   await loadGoogleCalendarStatus();
   showNotice("Tokens Google locais removidos. Revogue também o consentimento no Google, se desejar.","success");
 },event.currentTarget));
+
+// V24: historic V23 changes are read from the PostgreSQL proposal ledger.
+// Undo is never called without a fresh preview and an explicit user click.
+async function loadAgendaHistory(){
+  const response=await api("/api/agenda/history?limit=50");
+  const list=clear($("#agenda-history-list"));
+  $("#agenda-history-status").textContent=response.changes.length+
+    " alteração(ões) em lembretes do CORTEX registradas no histórico.";
+  if(!response.changes.length){
+    list.append(info("Nenhuma alteração aplicada foi registrada até agora."));
+    return;
+  }
+  for(const change of response.changes){
+    const item=node("article","recurrence-item");
+    const head=node("div","row-head");
+    head.append(node("strong","",change.title),statusPill(change.status));
+    item.append(head);
+    item.append(node("p","row-meta","Antes: "+dateTime(change.originalStart)));
+    item.append(node("p","row-meta","Depois: "+dateTime(change.proposedStart)));
+    if(change.appliedAt)item.append(node("p","hint",
+      "Alterado em: "+dateTime(change.appliedAt)));
+    if(change.revertedAt)item.append(node("p","hint",
+      "Restaurado em: "+dateTime(change.revertedAt)));
+    if(change.status==="APPLIED"){
+      item.append(makeButton("↶ Analisar reversão","btn-outline small",async()=>{
+        const data=await api("/api/agenda/history/"+encodeURIComponent(change.id)+
+          "/undo-preview");
+        const preview=data.preview;
+        if(!preview.eligible){
+          showNotice("Não é possível restaurar: "+preview.reason,"error");
+          return;
+        }
+        const question="RESTABELECER o horário anterior deste lembrete CORTEX?"+
+          "\nLembrete: "+preview.title+
+          "\nHorário atual: "+dateTime(preview.currentDueAt)+
+          "\nRestaurar para: "+dateTime(preview.restoreDueAt)+
+          "\nEste comando modifica de verdade o PostgreSQL, sem alterar o Google.";
+        if(!window.confirm(question))return;
+        const result=await api("/api/agenda/history/"+encodeURIComponent(change.id)+
+          "/undo",{method:"POST",body:{confirmed:true}});
+        await loadAgendaHistory();
+        showNotice("Horário anterior restaurado: "+dateTime(result.reminder.dueAt)+
+          ". Google Agenda não alterado.","success");
+      }));
+    }
+    list.append(item);
+  }
+}
+$("#refresh-agenda-history").addEventListener("click",event=>action(
+  loadAgendaHistory,event.currentTarget));
 
 // V22: local plan decisions. No Google event changes are performed here.
 async function loadAgendaProposals(){
