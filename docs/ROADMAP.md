@@ -38,3 +38,5 @@ V22: propostas persistentes de reorganização de agenda com escolha explícita 
 V23: aplicação explícita e transacional de propostas aprovadas apenas em lembretes internos PENDING do CORTEX, com revalidação, proteção contra replay e registro APPLIED; nenhuma alteração em eventos Google ou regras de recorrência.
 
 V24: histórico owner-scoped dos reagendamentos internos realmente aplicados pela V23, prévia de reversão supervisionada e restauração transacional do horário anterior dentro de 30 minutos quando a agenda atual permite, com registro REVERTED, sem editar Google.
+
+V25: Central de Atividades com consulta autenticada e filtrável dos eventos persistidos de lembretes, decisões sobre propostas, notificações de workflows e auditoria de ferramentas, ordenados por data. Somente leitura, privacidade por usuário, resultados limitados e avisos de histórico parcial; sem consultar Google ou executar ações.
