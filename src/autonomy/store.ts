@@ -26,7 +26,12 @@ function setting(row: SettingRow): Settings {
 export class PostgresMonitorRepository implements MonitorRepository {
   constructor(private readonly pool: Pool) {}
   async initialize(): Promise<void> {
-    await this.pool.query([
+    // Serialize schema setup across parallel test workers and backend replicas.
+    const client=await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(8142,1518)");
+    await client.query([
       "CREATE TABLE IF NOT EXISTS cortex_monitor_settings (",
       "user_id TEXT PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT FALSE,",
       "interval_seconds INTEGER NOT NULL DEFAULT 60 CHECK(interval_seconds BETWEEN 60 AND 3600),",
@@ -34,7 +39,7 @@ export class PostgresMonitorRepository implements MonitorRepository {
       "last_checked_at TIMESTAMPTZ, next_check_at TIMESTAMPTZ NOT NULL DEFAULT now(),",
       "last_check_ok BOOLEAN)"
     ].join(" "));
-    await this.pool.query([
+    await client.query([
       "CREATE TABLE IF NOT EXISTS cortex_persistent_notifications (",
       "id UUID PRIMARY KEY, user_id TEXT NOT NULL, workflow_id UUID NOT NULL,",
       "workflow_version INTEGER NOT NULL, workflow_status TEXT NOT NULL,",
@@ -42,14 +47,21 @@ export class PostgresMonitorRepository implements MonitorRepository {
       "created_at TIMESTAMPTZ NOT NULL, read_at TIMESTAMPTZ,",
       "UNIQUE(user_id, workflow_id, workflow_version, workflow_status))"
     ].join(" "));
-    await this.pool.query("CREATE INDEX IF NOT EXISTS cortex_notify_recent ON cortex_persistent_notifications (user_id, created_at DESC)");
-    await this.pool.query("CREATE INDEX IF NOT EXISTS cortex_notify_cooldown ON cortex_persistent_notifications (user_id, workflow_id, workflow_status, created_at DESC)");
-    await this.pool.query([
+    await client.query("CREATE INDEX IF NOT EXISTS cortex_notify_recent ON cortex_persistent_notifications (user_id, created_at DESC)");
+    await client.query("CREATE INDEX IF NOT EXISTS cortex_notify_cooldown ON cortex_persistent_notifications (user_id, workflow_id, workflow_status, created_at DESC)");
+    await client.query([
       "CREATE TABLE IF NOT EXISTS cortex_monitor_events (",
       "id UUID PRIMARY KEY, user_id TEXT NOT NULL, kind TEXT NOT NULL,",
       "sampled INTEGER NOT NULL, created INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL)"
     ].join(" "));
-    await this.pool.query("CREATE INDEX IF NOT EXISTS cortex_monitor_events_recent ON cortex_monitor_events (user_id, created_at DESC)");
+    await client.query("CREATE INDEX IF NOT EXISTS cortex_monitor_events_recent ON cortex_monitor_events (user_id, created_at DESC)");
+      await client.query("COMMIT");
+    } catch(error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
   private async ensure(user: string) {
     await this.pool.query("INSERT INTO cortex_monitor_settings(user_id) VALUES($1) ON CONFLICT DO NOTHING", [user]);
