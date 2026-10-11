@@ -26,7 +26,7 @@ describe("V25 private, read-only activity feed",()=>{
     const repository=new PostgresActivityFeed({query} as unknown as Pick<Pool,"query">);
     const result=await repository.list("owner-with-'quotation","tools",5);
     expect(query).toHaveBeenCalledOnce();
-    const [sql,params]=query.mock.calls[0] as [string,unknown[]];
+    const [sql,params]=query.mock.calls[0] as unknown as [string,unknown[]];
     expect(params).toEqual(["owner-with-'quotation","tools",5]);
     expect(sql).toContain("WHERE user_id=$1");
     expect(sql).toContain("LIMIT ($3::integer + 1)");
