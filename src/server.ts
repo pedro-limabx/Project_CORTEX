@@ -48,6 +48,7 @@ import {
 } from "./integrations/agenda-reorganization.js";
 import {PostgresAgendaProposalStore,ProposalQuotaError} from "./integrations/agenda-proposal-store.js";
 import {previewReminderUndo} from "./integrations/agenda-undo.js";
+import {PostgresActivityFeed,validActivityRequest} from "./activity/feed.js";
 import {
   GoogleCalendarReadOnly, GoogleCalendarAuthError, GoogleCalendarRemoteError
 } from "./integrations/google-calendar.js";
@@ -97,6 +98,8 @@ let autonomousStore: PostgresMonitorRepository | undefined;
 let reminderStore: PostgresReminderRepository | undefined;
 let recurrenceStore: PostgresRecurrenceRepository | undefined;
 let agendaProposalStore:PostgresAgendaProposalStore|undefined;
+const activityFeed=pool&&config.CORTEX_API_TOKEN
+  ?new PostgresActivityFeed(pool):undefined;
 const googleConfigured=Boolean(
   pool && config.CORTEX_API_TOKEN && config.GOOGLE_CALENDAR_CLIENT_ID
   && config.GOOGLE_CALENDAR_CLIENT_SECRET && config.GOOGLE_CALENDAR_REDIRECT_URI
@@ -663,6 +666,26 @@ app.post("/api/agenda/proposals/:id/:decision",{preHandler:authenticate},async(r
   return reply.header("Cache-Control","private, no-store")
     .send({proposal:updated,externalChangeApplied:false,
       message:"Decisão registrada. Nenhum compromisso foi alterado."});
+});
+
+// V25: read-only private activity center. Opt-in Bearer is required even in
+// development; never expose private reminder titles on an open Codespaces port.
+app.get("/api/activity",{preHandler:authenticate},async(request,reply)=>{
+  if(!activityFeed)return reply.code(503).send({
+    error:"Central de atividades requer PostgreSQL e CORTEX_API_TOKEN configurados."
+  });
+  const query=request.query as {category?:unknown;limit?:unknown};
+  const rawCategory=query.category??"all",rawLimit=query.limit??30;
+  // Preserve the strict documented 1..100 range and disallow fractions,
+  // NaN and arbitrary categories. Limit defaults to 30.
+  const parsed=typeof rawLimit==="string"&&/^\d{1,3}$/u.test(rawLimit)
+    ?Number(rawLimit):rawLimit;
+  const valid=validActivityRequest(rawCategory,parsed);
+  if(!valid)return reply.code(400).send({
+    error:"category deve ser all/reminders/agenda/notifications/tools; limit deve estar entre 1 e 100."
+  });
+  const snapshot=await activityFeed.list(config.CORTEX_USER_ID,valid.category,valid.limit);
+  return reply.header("Cache-Control","private, no-store").send(snapshot);
 });
 
 // V24: audit trail based on the durable V23 plan record, including both
