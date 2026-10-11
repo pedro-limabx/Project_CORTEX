@@ -41,6 +41,7 @@
       <button class="nav-button" data-tab="google-calendar">▦ <span>Google Agenda</span></button>
       <button class="nav-button" data-tab="agenda-proposals">◇ <span>Propostas de agenda</span></button>
       <button class="nav-button" data-tab="agenda-history">↶ <span>Histórico da agenda</span></button>
+      <button class="nav-button" data-tab="activity">◴ <span>Central de atividades</span></button>
       <button class="nav-button" data-tab="chat">✦ <span>NEURON Chat</span></button>
       <button class="nav-button" data-tab="workflows">⬡ <span>Workflows v2</span></button>
       <button class="nav-button" data-tab="tasks">▤ <span>Tarefas</span></button>
@@ -385,6 +386,41 @@
           <p id="agenda-history-status" class="hint" role="status" aria-live="polite">Aguardando consulta...</p>
           <div id="agenda-history-list" class="recurrence-list"></div>
           <div class="tip">A reversão exige confirmação e só é possível até 30 minutos após a aplicação. O horário original deve continuar futuro, o lembrete deve estar pendente e a agenda precisa ser verificada novamente. Eventos Google nunca são modificados.</div>
+        </article>
+      </section>
+
+      <section class="panel" data-panel="activity" hidden>
+        <div class="page-heading">
+          <div><div class="eyebrow">NEURON ACTIVITY / CORTEX V25</div>
+            <h1>Central de <span>atividades.</span></h1>
+            <p>Consulte ações e decisões realmente registradas pelo CORTEX. Esta central não executa comandos nem acessa o Google Agenda.</p>
+          </div>
+          <button id="refresh-activity" type="button" class="btn btn-outline">↻ Atualizar atividades</button>
+        </div>
+        <article class="card">
+          <div class="card-head"><h2>Atividades recentes</h2><span class="overline">POSTGRESQL / SOMENTE LEITURA</span></div>
+          <div class="actions">
+            <label class="field-label" for="activity-category">Categoria
+              <select id="activity-category">
+                <option value="all" selected>Todas</option>
+                <option value="reminders">Lembretes</option>
+                <option value="agenda">Decisões e agenda</option>
+                <option value="notifications">Notificações persistidas</option>
+                <option value="tools">Auditoria de ferramentas</option>
+              </select>
+            </label>
+            <label class="field-label" for="activity-limit">Mostrar até
+              <select id="activity-limit">
+                <option value="20">20 atividades</option>
+                <option value="30" selected>30 atividades</option>
+                <option value="50">50 atividades</option>
+                <option value="100">100 atividades</option>
+              </select>
+            </label>
+          </div>
+          <p id="activity-status" class="hint" role="status" aria-live="polite">Selecione a central para carregar as atividades.</p>
+          <div id="activity-list" class="activity-list" aria-live="polite"></div>
+          <p class="hint">Histórico limitado a lembretes, propostas, notificações persistidas e auditoria de ferramentas. Não inclui eventos externos do Google nem todas as ações do NEURON. Títulos de lembretes são dados privados.</p>
         </article>
       </section>
 

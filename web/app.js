@@ -189,7 +189,8 @@ async function action(operation, button = null) {
 function tab(name) {
   const labels = {
     overview: "Visão geral", monitoring: "Monitoramento", alerts: "Alertas", reminders: "Lembretes", "google-calendar":"Google Agenda", chat: "NEURON Chat",
-    "agenda-proposals":"Propostas de agenda","agenda-history":"Histórico da agenda",workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
+    "agenda-proposals":"Propostas de agenda","agenda-history":"Histórico da agenda",
+    activity:"Central de atividades",workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
   };
   if (!labels[name]) return;
   $$("[data-panel]").forEach(panel => { panel.hidden = panel.dataset.panel !== name; });
@@ -202,6 +203,7 @@ function tab(name) {
   if (name === "google-calendar") action(loadGoogleCalendarStatus);
   if (name === "agenda-proposals") action(loadAgendaProposals);
   if (name === "agenda-history") action(loadAgendaHistory);
+  if (name === "activity") action(loadActivityCenter);
   if (name === "workflows") action(loadWorkflows);
   if (name === "tasks") action(loadTasks);
   if (name === "tools") action(loadTools);
@@ -835,6 +837,46 @@ $("#google-calendar-disconnect").addEventListener("click",event=>action(async()=
   await loadGoogleCalendarStatus();
   showNotice("Tokens Google locais removidos. Revogue também o consentimento no Google, se desejar.","success");
 },event.currentTarget));
+
+// V25: a private read-only projection; never executes a task or acknowledges
+// notifications automatically. Rendering uses textContent for all DB values.
+const activityKinds={
+  reminders:"Lembretes",agenda:"Agenda",notifications:"Notificações",
+  tools:"Ferramentas"
+};
+async function loadActivityCenter(){
+  const category=$("#activity-category").value;
+  const limit=Number($("#activity-limit").value);
+  if(!["all","reminders","agenda","notifications","tools"].includes(category)
+     ||![20,30,50,100].includes(limit))throw new Error("Filtro inválido");
+  const result=await api("/api/activity?category="+encodeURIComponent(category)+
+    "&limit="+limit);
+  const target=clear($("#activity-list"));
+  $("#activity-status").textContent=result.entries.length+
+    " atividade(s) na amostra · "+(result.truncated
+      ?"existem registros mais antigos não carregados."
+      :"nenhum registro adicional nesta consulta.");
+  if(!result.entries.length){
+    target.append(info("Nenhuma atividade encontrada para este filtro."));
+    return;
+  }
+  for(const event of result.entries){
+    const card=node("article","activity-entry");
+    const head=node("div","row-head");
+    head.append(node("strong","",activityKinds[event.category]||"CORTEX"),
+      statusPill(event.status));
+    card.append(head,node("p","activity-description",event.description),
+      node("p","row-meta",dateTime(event.occurredAt)+
+        " · Histórico interno do CORTEX"));
+    target.append(card);
+  }
+  if(result.truncated)target.append(info(
+    "Lista parcial: refine a categoria. Esta página não representa o histórico completo."));
+}
+$("#refresh-activity").addEventListener("click",event=>action(
+  loadActivityCenter,event.currentTarget));
+$("#activity-category").addEventListener("change",()=>action(loadActivityCenter));
+$("#activity-limit").addEventListener("change",()=>action(loadActivityCenter));
 
 // V24: historic V23 changes are read from the PostgreSQL proposal ledger.
 // Undo is never called without a fresh preview and an explicit user click.
