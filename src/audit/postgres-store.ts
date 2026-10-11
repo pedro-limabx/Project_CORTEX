@@ -6,7 +6,12 @@ export class PostgresAuditStore implements AuditStore {
   constructor(private readonly pool: Pool) {}
 
   async initialize(): Promise<void> {
-    await this.pool.query(`
+    // Serialize schema setup across parallel test workers and backend replicas.
+    const client=await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(8142,1518)");
+    await client.query(`
       CREATE TABLE IF NOT EXISTS neuron_audit_events (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -18,14 +23,21 @@ export class PostgresAuditStore implements AuditStore {
         created_at TIMESTAMPTZ NOT NULL
       )
     `);
-    await this.pool.query(`
+    await client.query(`
       CREATE INDEX IF NOT EXISTS neuron_audit_user_created_idx
       ON neuron_audit_events (user_id, created_at DESC)
     `);
-    await this.pool.query(`
+    await client.query(`
       CREATE INDEX IF NOT EXISTS neuron_audit_request_idx
       ON neuron_audit_events (request_id)
     `);
+      await client.query("COMMIT");
+    } catch(error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async record(entry: AuditRecord): Promise<void> {

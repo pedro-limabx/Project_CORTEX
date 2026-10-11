@@ -331,3 +331,10 @@ body.cortex-opening { overflow:hidden }
 @keyframes cortex-boot-pulse { 0%,100%{opacity:.55;transform:scale(.98)}50%{opacity:1;transform:scale(1.02)} }
 @media (prefers-reduced-motion:reduce) { .cortex-splash-fallback { animation:none } }
 @media (max-width:640px) { .splash-bottom { justify-content:center;text-align:center } }
+
+/* V25: neutral activity timeline, safe text and responsive layout. */
+.activity-list { display:grid;gap:10px;margin-top:14px }
+.activity-entry { padding:14px 16px;border:1px solid var(--border);border-radius:10px;background:#111e2b }
+.activity-entry .row-head { display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap }
+.activity-description { font-size:13px;line-height:1.5;margin:9px 0 5px;overflow-wrap:anywhere;white-space:pre-wrap }
+.activity-entry .row-meta {overflow-wrap:anywhere}

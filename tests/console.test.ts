@@ -71,6 +71,18 @@ describe("CORTEX web console", () => {
     expect(index.body).toContain('id="chat-conflicts-tomorrow"');
     expect(index.body).toContain('data-tab="agenda-proposals"');
     expect(index.body).toContain('data-tab="agenda-history"');
+    expect(index.body).toContain('data-tab="activity"');
+    expect(index.body).toContain('data-panel="activity"');
+    expect(index.body).toContain('id="activity-category"');
+    expect(index.body).toContain('id="activity-limit"');
+    expect(index.body).toContain('id="activity-list"');
+    expect(index.body).toContain('id="refresh-activity"');
+    expect(index.body).toContain('CORTEX V25');
+    expect(script.body).toContain('async function loadActivityCenter()');
+    expect(script.body).toContain('api("/api/activity?category="');
+    expect(script.body).toContain('activity:"Central de atividades"');
+    expect(script.body).toContain('node("p","activity-description",event.description)');
+    expect(script.body).not.toContain('innerHTML');
     expect(index.body).toContain('id="refresh-agenda-history"');
     expect(index.body).toContain('CORTEX V24');
     expect(script.body).toContain('async function loadAgendaHistory()');
