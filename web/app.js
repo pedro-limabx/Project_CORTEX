@@ -96,6 +96,9 @@ const statusLabels = {
   REJECTED: "Plano rejeitado",
   APPLIED: "Aplicado ao CORTEX",
   REVERTED: "Horário restaurado",
+  CREATED: "Registrado",
+  READ: "Visualizado",
+  SUCCESS: "Executado",
   EXPIRED: "Expirado"
 };
 
