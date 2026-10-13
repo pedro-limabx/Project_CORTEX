@@ -193,7 +193,7 @@ function tab(name) {
   const labels = {
     overview: "Visão geral", monitoring: "Monitoramento", alerts: "Alertas", reminders: "Lembretes", "google-calendar":"Google Agenda", chat: "NEURON Chat",
     "agenda-proposals":"Propostas de agenda","agenda-history":"Histórico da agenda",
-    activity:"Central de atividades",workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
+    activity:"Central de atividades",priorities:"Central de prioridades",workflows: "Workflows v2", tasks: "Tarefas", tools: "Ferramentas"
   };
   if (!labels[name]) return;
   $$("[data-panel]").forEach(panel => { panel.hidden = panel.dataset.panel !== name; });
@@ -207,6 +207,7 @@ function tab(name) {
   if (name === "agenda-proposals") action(loadAgendaProposals);
   if (name === "agenda-history") action(loadAgendaHistory);
   if (name === "activity") action(loadActivityCenter);
+  if (name === "priorities") action(loadPriorities);
   if (name === "workflows") action(loadWorkflows);
   if (name === "tasks") action(loadTasks);
   if (name === "tools") action(loadTools);
@@ -840,6 +841,53 @@ $("#google-calendar-disconnect").addEventListener("click",event=>action(async()=
   await loadGoogleCalendarStatus();
   showNotice("Tokens Google locais removidos. Revogue também o consentimento no Google, se desejar.","success");
 },event.currentTarget));
+
+// V26: explicit, manual priority checks; category links only navigate to
+// existing views and do not acknowledge, approve or execute actions.
+const prioritySeverityLabels={critical:"Crítica",high:"Alta",medium:"Média"};
+async function loadPriorities(){
+  const filter=$("#priorities-filter").value;
+  const limit=Number($("#priorities-limit").value);
+  if(!["all","urgent","reminders","workflows","decisions"].includes(filter)
+     ||![20,30,50,100].includes(limit))throw new Error("Filtro inválido");
+  const result=await api("/api/priorities?filter="+encodeURIComponent(filter)+
+    "&limit="+limit);
+  const target=clear($("#priorities-list"));
+  const warnings=clear($("#priorities-warnings"));
+  $("#priority-critical").textContent=String(result.counts.critical);
+  $("#priority-high").textContent=String(result.counts.high);
+  $("#priority-medium").textContent=String(result.counts.medium);
+  $("#priorities-status").textContent=result.counts.inSample+
+    " demanda(s) identificadas na amostra · mostrando "+result.items.length+
+    (result.partial?" · resultado parcial.":" · consulta concluída.");
+  for(const message of result.warnings??[])warnings.append(info(message));
+  if(!result.items.length){
+    target.append(info("Nenhuma pendência encontrada na amostra selecionada."));
+    return;
+  }
+  for(const item of result.items){
+    const card=node("article","activity-entry priority-"+item.severity);
+    const head=node("div","row-head");
+    head.append(node("strong","",item.title),node("span",
+      "priority-severity "+item.severity,prioritySeverityLabels[item.severity]||"—"));
+    card.append(head,node("p","activity-description",item.reason),
+      node("p","row-meta",dateTime(item.occurredAt)+
+        (item.deadlineAt?" · Referência: "+dateTime(item.deadlineAt):"")),
+      node("p","hint",item.nextStep));
+    const destinations={reminders:"Lembretes",alerts:"Alertas",
+      "agenda-proposals":"Propostas de agenda"};
+    const destination=destinations[item.sourceTab];
+    if(destination)card.append(makeButton("Abrir "+destination+" ↗",
+      "btn-outline small",()=>tab(item.sourceTab)));
+    target.append(card);
+  }
+  if(result.partial)target.append(info(
+    "Os resultados podem estar incompletos. Abra as telas de origem para consultar outros registros."));
+}
+$("#refresh-priorities").addEventListener("click",event=>action(
+  loadPriorities,event.currentTarget));
+$("#priorities-filter").addEventListener("change",()=>action(loadPriorities));
+$("#priorities-limit").addEventListener("change",()=>action(loadPriorities));
 
 // V25: a private read-only projection; never executes a task or acknowledges
 // notifications automatically. Rendering uses textContent for all DB values.
