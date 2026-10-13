@@ -40,3 +40,5 @@ V23: aplicação explícita e transacional de propostas aprovadas apenas em lemb
 V24: histórico owner-scoped dos reagendamentos internos realmente aplicados pela V23, prévia de reversão supervisionada e restauração transacional do horário anterior dentro de 30 minutos quando a agenda atual permite, com registro REVERTED, sem editar Google.
 
 V25: Central de Atividades com consulta autenticada e filtrável dos eventos persistidos de lembretes, decisões sobre propostas, notificações de workflows e auditoria de ferramentas, ordenados por data. Somente leitura, privacidade por usuário, resultados limitados e avisos de histórico parcial; sem consultar Google ou executar ações.
+
+V26: Central de Prioridades supervisionada, com classificação determinística de alertas operacionais não reconhecidos, lembretes vencidos e decisões atuais de agenda. Endpoint autenticado com PostgreSQL, filtros, limites, justificativas, avisos de cobertura e atalhos apenas de navegação; nenhuma aprovação/execução automática.
