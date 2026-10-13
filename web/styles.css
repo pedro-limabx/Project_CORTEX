@@ -338,3 +338,17 @@ body.cortex-opening { overflow:hidden }
 .activity-entry .row-head { display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap }
 .activity-description { font-size:13px;line-height:1.5;margin:9px 0 5px;overflow-wrap:anywhere;white-space:pre-wrap }
 .activity-entry .row-meta {overflow-wrap:anywhere}
+
+/* V26: attention levels are visually identifiable without relying on color. */
+.priority-metrics{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:16px}
+.priority-severity{font-size:11px;font-weight:800;border:1px solid var(--border);
+  border-radius:6px;padding:4px 9px;white-space:nowrap}
+.priority-severity.critical{border-color:#e37474}
+.priority-severity.high{border-color:#c39b60}
+.priority-severity.medium{border-color:#5a87a5}
+.priority-warnings{display:grid;gap:8px;margin:10px 0}
+.priority-critical{border-left:3px solid #e37474}
+.priority-high{border-left:3px solid #c39b60}
+.priority-medium{border-left:3px solid #5a87a5}
+@media(max-width:640px){.priority-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+.priority-metrics .metric{padding:12px}.priority-metrics .metric strong{font-size:24px}}

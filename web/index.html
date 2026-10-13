@@ -42,6 +42,7 @@
       <button class="nav-button" data-tab="agenda-proposals">◇ <span>Propostas de agenda</span></button>
       <button class="nav-button" data-tab="agenda-history">↶ <span>Histórico da agenda</span></button>
       <button class="nav-button" data-tab="activity">◴ <span>Central de atividades</span></button>
+      <button class="nav-button" data-tab="priorities">◆ <span>Central de prioridades</span></button>
       <button class="nav-button" data-tab="chat">✦ <span>NEURON Chat</span></button>
       <button class="nav-button" data-tab="workflows">⬡ <span>Workflows v2</span></button>
       <button class="nav-button" data-tab="tasks">▤ <span>Tarefas</span></button>
@@ -421,6 +422,47 @@
           <p id="activity-status" class="hint" role="status" aria-live="polite">Selecione a central para carregar as atividades.</p>
           <div id="activity-list" class="activity-list" aria-live="polite"></div>
           <p class="hint">Histórico limitado a lembretes, propostas, notificações persistidas e auditoria de ferramentas. Não inclui eventos externos do Google nem todas as ações do NEURON. Títulos de lembretes são dados privados.</p>
+        </article>
+      </section>
+
+      <section class="panel" data-panel="priorities" hidden>
+        <div class="page-heading">
+          <div><div class="eyebrow">NEURON PRIORITIES / CORTEX V26</div>
+            <h1>Central de <span>prioridades.</span></h1>
+            <p>O que merece sua atenção primeiro? Priorização por regras explícitas, sem executar ações e sem avaliar dados externos do Google.</p>
+          </div>
+          <button id="refresh-priorities" type="button" class="btn btn-outline">↻ Atualizar prioridades</button>
+        </div>
+        <article class="card">
+          <div class="card-head"><h2>Fila de atenção</h2><span class="overline">SOMENTE LEITURA / AMOSTRA ATUAL</span></div>
+          <div class="actions">
+            <label class="field-label" for="priorities-filter">Ver
+              <select id="priorities-filter">
+                <option value="all" selected>Todas</option>
+                <option value="urgent">Urgentes</option>
+                <option value="reminders">Lembretes vencidos</option>
+                <option value="workflows">Alertas de workflows</option>
+                <option value="decisions">Decisões pendentes</option>
+              </select>
+            </label>
+            <label class="field-label" for="priorities-limit">Mostrar até
+              <select id="priorities-limit">
+                <option value="20">20</option>
+                <option value="30" selected>30</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+          </div>
+          <p id="priorities-status" class="hint" role="status" aria-live="polite">Aguardando consulta das prioridades...</p>
+          <div class="metrics priority-metrics" aria-label="Distribuição de prioridades da amostra">
+            <div class="metric"><small>CRÍTICAS</small><strong id="priority-critical">—</strong><span>Falhas / reconciliações</span></div>
+            <div class="metric"><small>ALTAS</small><strong id="priority-high">—</strong><span>Vencimentos e atenção</span></div>
+            <div class="metric"><small>MÉDIAS</small><strong id="priority-medium">—</strong><span>Decisões para revisar</span></div>
+          </div>
+          <div id="priorities-warnings" class="priority-warnings" aria-live="polite"></div>
+          <div id="priorities-list" class="activity-list" aria-live="polite"></div>
+          <p class="hint">As prioridades refletem apenas dados já conhecidos do CORTEX. Contagens podem ser parciais. Os botões abrem as telas correspondentes, sem aprovar, alterar ou executar nada.</p>
         </article>
       </section>
 
