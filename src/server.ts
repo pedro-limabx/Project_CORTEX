@@ -49,6 +49,7 @@ import {
 import {PostgresAgendaProposalStore,ProposalQuotaError} from "./integrations/agenda-proposal-store.js";
 import {previewReminderUndo} from "./integrations/agenda-undo.js";
 import {PostgresActivityFeed,validActivityRequest} from "./activity/feed.js";
+import {computePriorities,validatePriorityRequest} from "./priorities/service.js";
 import {
   GoogleCalendarReadOnly, GoogleCalendarAuthError, GoogleCalendarRemoteError
 } from "./integrations/google-calendar.js";
@@ -666,6 +667,27 @@ app.post("/api/agenda/proposals/:id/:decision",{preHandler:authenticate},async(r
   return reply.header("Cache-Control","private, no-store")
     .send({proposal:updated,externalChangeApplied:false,
       message:"Decisão registrada. Nenhum compromisso foi alterado."});
+});
+
+// V26: deterministic priority inbox for current actionable state, never
+// an action executor. Same Bearer and owner constraints as V25/V22.
+app.get("/api/priorities",{preHandler:authenticate},async(request,reply)=>{
+  if(!pool||!config.CORTEX_API_TOKEN||!reminderStore||!agendaProposalStore)
+    return reply.code(503).send({
+      error:"Central de prioridades requer PostgreSQL e CORTEX_API_TOKEN configurados."
+    });
+  const query=request.query as {filter?:unknown;limit?:unknown};
+  const rawFilter=query.filter??"all",rawLimit=query.limit??30;
+  const limit=typeof rawLimit==="string"&&/^\d{1,3}$/u.test(rawLimit)
+    ?Number(rawLimit):rawLimit;
+  const valid=validatePriorityRequest(rawFilter,limit);
+  if(!valid)return reply.code(400).send({
+    error:"filter deve ser all/urgent/reminders/workflows/decisions; limit entre 1 e 100."
+  });
+  const snapshot=await computePriorities({
+    reminders:reminderStore,proposals:agendaProposalStore,alerts:operationalAlerts
+  },config.CORTEX_USER_ID,valid.filter,valid.limit);
+  return reply.header("Cache-Control","private, no-store").send(snapshot);
 });
 
 // V25: read-only private activity center. Opt-in Bearer is required even in
